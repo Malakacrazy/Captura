@@ -5,8 +5,10 @@ const $ = id => document.getElementById(id);
 const CATEGORIES = [
   { id: 'revestimentos', label: 'Revestimentos' },
   { id: 'loucas-metais', label: 'Louças e Metais' },
-  { id: 'iluminacao',    label: 'Iluminação & Dec.' },
-  { id: 'enxoval',      label: 'Enxoval' },
+  { id: 'iluminacao',    label: 'Iluminação' },
+  { id: 'eletros',      label: 'Eletros' },
+  { id: 'moveis',      label: 'Movéis' },
+  { id: 'decoracao-enxoval',      label: 'Decoração e Enxoval' },
   { id: 'outros',       label: 'Outros' }
 ];
 
