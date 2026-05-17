@@ -350,6 +350,10 @@ $('generateBtn').addEventListener('click', () => {
   chrome.runtime.sendMessage({ action: 'openPrint' });
 });
 
+$('libraryBtn').addEventListener('click', () => {
+  chrome.runtime.sendMessage({ action: 'openLibrary' });
+});
+
 // ─── Product extractor (injected into page) ────────────────────────────────
 // This function runs in the context of the store page.
 

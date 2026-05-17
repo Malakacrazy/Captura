@@ -97,7 +97,7 @@
     }
 
     .logo-block { display: flex; align-items: center; gap: 16px; }
-    .logo-svg { width: 58px; height: 58px; }
+    .logo-img { width: 58px; height: 58px; border-radius: 50%; display: block; }
 
     .logo-name {
       font-family: 'Cormorant Garamond', serif;
@@ -272,14 +272,24 @@
       background: linear-gradient(90deg, var(--duna) 0%, var(--cacau) 50%, var(--ferrugem) 100%);
     }
 
+    /* Evitar quebras no meio de linhas e seções */
+    .table-row   { page-break-inside: avoid; break-inside: avoid; }
+    .cat-section { page-break-inside: avoid; break-inside: avoid; }
+    .cat-header  { page-break-after:  avoid; break-after:  avoid; }
+
     /* Print media */
     @media print {
       body { background: none; padding: 0; }
       .print-bar { display: none; }
       .page { margin: 0; width: 100%; box-shadow: none; min-height: auto; }
 
+      /* Margem superior e inferior em todas as páginas para não colar no corte */
       @page {
         size: A4;
+        margin: 14mm 0;
+      }
+      /* Primeira página sem margem extra — o cabeçalho HTML já preenche */
+      @page :first {
         margin: 0;
       }
     }
@@ -301,16 +311,7 @@
     <!-- Header -->
     <header class="header">
       <div class="logo-block">
-        <svg class="logo-svg" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-          <circle cx="50" cy="50" r="46" fill="none" stroke="#E8DED4" stroke-width="1.5"/>
-          <g transform="translate(50,50)">
-            <path d="M2,-32 C20,-26 32,-10 26,6 C20,22 5,28 -7,20" fill="none" stroke="#A35940" stroke-width="7.5" stroke-linecap="round"/>
-            <path d="M2,-32 C20,-26 32,-10 26,6 C20,22 5,28 -7,20" fill="none" stroke="#A35940" stroke-width="7.5" stroke-linecap="round" transform="rotate(72)"/>
-            <path d="M2,-32 C20,-26 32,-10 26,6 C20,22 5,28 -7,20" fill="none" stroke="#A35940" stroke-width="7.5" stroke-linecap="round" transform="rotate(144)"/>
-            <path d="M2,-32 C20,-26 32,-10 26,6 C20,22 5,28 -7,20" fill="none" stroke="#A35940" stroke-width="7.5" stroke-linecap="round" transform="rotate(216)"/>
-            <path d="M2,-32 C20,-26 32,-10 26,6 C20,22 5,28 -7,20" fill="none" stroke="#A35940" stroke-width="7.5" stroke-linecap="round" transform="rotate(288)"/>
-          </g>
-        </svg>
+        <img src="icons/icon128.png" class="logo-img" alt="Studio Araci"/>
         <div>
           <div class="logo-name">Studio Araci</div>
           <div class="logo-tagline">Tudo começa pelo que você sente</div>
@@ -354,8 +355,8 @@
       <span class="gt-value" id="grandTotal">—</span>
     </div>
 
-    <!-- Spacer -->
-    <div style="flex:1;min-height:32px"></div>
+    <!-- Spacer (sem flex:1 — .sections já cresce para empurrar o footer ao fundo) -->
+    <div style="min-height:32px"></div>
 
     <!-- Footer -->
     <footer class="footer">

@@ -5,6 +5,7 @@
   "description": "Capture produtos de lojas online e gere orçamentos com a identidade visual do Studio Araci.",
   "permissions": [
     "storage",
+    "unlimitedStorage",
     "activeTab",
     "scripting",
     "tabs"
@@ -33,7 +34,7 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["print.html", "print.js", "print.css", "icons/*"],
+      "resources": ["print.html", "print.js", "library.html", "library.js", "icons/*"],
       "matches": ["<all_urls>"]
     }
   ]

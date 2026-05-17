@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Studio Araci · Biblioteca de Projetos</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --ferrugem:  #A35940;
+      --terracota: #9F4F39;
+      --cacau:     #B36C51;
+      --baleia:    #5E6979;
+      --areia:     #E8DED4;
+      --areia-dark:#D6C9BC;
+      --duna:      #CDB8A3;
+      --bg:        #F5F0EB;
+      --text:      #2E2620;
+      --muted:     #7A6A60;
+      --border:    #DDD0C4;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+      font-size: 13px;
+      min-height: 100vh;
+    }
+
+    /* ── Header ───────────────────────────────────────────── */
+    .header {
+      background: var(--ferrugem);
+      padding: 14px 20px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    .hdr-logo { width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0; }
+    .hdr-text { flex: 1; }
+    .hdr-studio { color: rgba(255,255,255,0.7); font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; }
+    .hdr-title  { color: #fff; font-size: 15px; font-weight: 600; }
+    .hdr-back {
+      background: rgba(255,255,255,0.15);
+      border: 1px solid rgba(255,255,255,0.25);
+      color: #fff;
+      padding: 5px 12px;
+      border-radius: 5px;
+      font-size: 12px;
+      cursor: pointer;
+      font-family: inherit;
+      transition: background 0.12s;
+    }
+    .hdr-back:hover { background: rgba(255,255,255,0.25); }
+
+    /* ── Save bar ─────────────────────────────────────────── */
+    .save-bar {
+      background: #fff;
+      border-bottom: 1px solid var(--border);
+      padding: 14px 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .save-current {
+      flex: 1;
+      min-width: 180px;
+    }
+    .save-current-label {
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 2px;
+    }
+    .save-current-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+    }
+    .save-current-meta { font-size: 11px; color: var(--muted); margin-top: 1px; }
+
+    .btn { padding: 7px 14px; border-radius: 5px; font-size: 12px; font-weight: 600; cursor: pointer; border: none; font-family: inherit; letter-spacing: 0.02em; transition: all 0.12s; white-space: nowrap; }
+    .btn-primary   { background: var(--ferrugem); color: #fff; }
+    .btn-primary:hover   { background: var(--terracota); }
+    .btn-secondary { background: var(--bg); color: var(--text); border: 1px solid var(--border); }
+    .btn-secondary:hover { background: var(--areia); }
+    .btn-update    { background: var(--baleia); color: #fff; }
+    .btn-update:hover    { background: #4e5a6b; }
+
+    /* ── Content area ─────────────────────────────────────── */
+    .content { max-width: 720px; margin: 0 auto; padding: 20px; }
+
+    .section-title {
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 12px;
+    }
+
+    /* ── Project card ─────────────────────────────────────── */
+    .project-card {
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px 16px;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      transition: box-shadow 0.12s;
+    }
+    .project-card:hover { box-shadow: 0 2px 12px rgba(0,0,0,0.08); }
+
+    .project-icon {
+      width: 40px;
+      height: 40px;
+      background: var(--areia);
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      flex-shrink: 0;
+      color: var(--ferrugem);
+    }
+
+    .project-info { flex: 1; min-width: 0; }
+    .project-name-wrap { display: flex; align-items: center; gap: 6px; }
+    .project-name {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .project-name-input {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text);
+      border: 1px solid var(--ferrugem);
+      border-radius: 4px;
+      padding: 2px 6px;
+      background: #fff;
+      font-family: inherit;
+      outline: none;
+      flex: 1;
+      min-width: 0;
+    }
+    .project-meta { font-size: 11px; color: var(--muted); margin-top: 3px; }
+
+    .project-total {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--ferrugem);
+      text-align: right;
+      flex-shrink: 0;
+    }
+    .project-actions { display: flex; gap: 6px; flex-shrink: 0; }
+
+    .act-btn {
+      padding: 5px 10px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--text);
+      font-family: inherit;
+      transition: all 0.12s;
+    }
+    .act-btn:hover { background: var(--areia); }
+    .act-btn.load  { background: var(--ferrugem); color: #fff; border-color: var(--ferrugem); }
+    .act-btn.load:hover  { background: var(--terracota); }
+    .act-btn.del   { color: #dc2626; border-color: #fecaca; background: #fff; }
+    .act-btn.del:hover   { background: #fee2e2; }
+
+    /* ── Empty state ──────────────────────────────────────── */
+    .empty-state {
+      text-align: center;
+      padding: 48px 20px;
+      color: var(--muted);
+    }
+    .empty-icon { font-size: 40px; margin-bottom: 12px; }
+    .empty-state p { font-size: 13px; line-height: 1.7; }
+    .empty-state strong { color: var(--text); }
+
+    /* ── Toast ────────────────────────────────────────────── */
+    #toast {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--text);
+      color: #fff;
+      padding: 9px 20px;
+      border-radius: 20px;
+      font-size: 13px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s;
+      white-space: nowrap;
+    }
+    #toast.show { opacity: 1; }
+  </style>
+</head>
+<body>
+
+  <header class="header">
+    <img src="icons/icon128.png" class="hdr-logo" alt="Studio Araci"/>
+    <div class="hdr-text">
+      <div class="hdr-studio">Studio Araci</div>
+      <div class="hdr-title">Biblioteca de Projetos</div>
+    </div>
+    <button class="hdr-back" id="backBtn">← Fechar</button>
+  </header>
+
+  <div class="save-bar">
+    <div class="save-current">
+      <div class="save-current-label">Orçamento em aberto</div>
+      <div class="save-current-name" id="currentName">—</div>
+      <div class="save-current-meta" id="currentMeta">—</div>
+    </div>
+    <button class="btn btn-update" id="updateBtn" style="display:none">↺ Atualizar Projeto</button>
+    <button class="btn btn-primary" id="saveNewBtn">+ Salvar como Projeto</button>
+  </div>
+
+  <div class="content">
+    <div class="section-title">Projetos Salvos</div>
+    <div id="projectList"></div>
+    <div class="empty-state" id="emptyState" style="display:none">
+      <div class="empty-icon">📁</div>
+      <p>Nenhum projeto salvo ainda.<br/>
+      <strong>Salve o orçamento atual</strong> para acessá-lo depois.</p>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+
+  <script src="library.js"></script>
+</body>
+</html>
