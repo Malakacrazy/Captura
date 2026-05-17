@@ -276,7 +276,7 @@
     @media print {
       body { background: none; padding: 0; }
       .print-bar { display: none; }
-      .page { margin: 0; width: 100%; box-shadow: none; min-height: auto; }
+      .page { margin: 0; width: 100%; box-shadow: none; min-height: 297mm; }
 
       @page {
         size: A4;
@@ -354,8 +354,8 @@
       <span class="gt-value" id="grandTotal">—</span>
     </div>
 
-    <!-- Spacer -->
-    <div style="flex:1;min-height:32px"></div>
+    <!-- Spacer (sem flex:1 — .sections já cresce para empurrar o footer ao fundo) -->
+    <div style="min-height:32px"></div>
 
     <!-- Footer -->
     <footer class="footer">
