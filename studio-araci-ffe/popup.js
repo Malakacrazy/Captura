@@ -354,113 +354,217 @@ $('generateBtn').addEventListener('click', () => {
 // This function runs in the context of the store page.
 
 function extractProductFromPage() {
-  // ── Image: og:image is the most canonical product image ──
-  function getBestImage() {
-    const og = document.querySelector('meta[property="og:image"]')?.content;
-    if (og) return og;
-
-    // Collect all images, score by size + position
-    const candidates = [...document.images]
-      .filter(img => {
-        const w = img.naturalWidth, h = img.naturalHeight;
-        if (w < 100 || h < 100) return false;
-        // Exclude logos, icons, banners
-        const src = img.src.toLowerCase();
-        if (/logo|icon|sprite|banner|badge|brand|avatar|flag/.test(src)) return false;
-        const ratio = w / h;
-        if (ratio < 0.3 || ratio > 3) return false; // extreme aspect ratios
-        return true;
-      })
-      .map(img => ({
-        src: img.src,
-        area: img.naturalWidth * img.naturalHeight,
-        rendered: img.getBoundingClientRect()
-      }))
-      .sort((a, b) => b.area - a.area);
-
-    return candidates[0]?.src || '';
-  }
-
-  // ── Price ──
-  function getPrice() {
-    // JSON-LD structured data (most reliable)
-    const ld = document.querySelector('script[type="application/ld+json"]');
-    if (ld) {
+  // ── JSON-LD helper — searches all scripts, unwraps @graph ────────────────
+  function fromJsonLD(pick) {
+    for (const s of document.querySelectorAll('script[type="application/ld+json"]')) {
       try {
-        const data = JSON.parse(ld.textContent);
-        const arr = Array.isArray(data) ? data : [data];
-        for (const item of arr) {
-          const offer = item.offers || item.Offers;
-          if (offer) {
-            const price = offer.price || offer.lowPrice;
-            if (price) return parseFloat(String(price).replace(',', '.'));
+        const root = JSON.parse(s.textContent);
+        const nodes = [];
+        const unwrap = o => {
+          if (Array.isArray(o)) o.forEach(unwrap);
+          else if (o && typeof o === 'object') {
+            nodes.push(o);
+            if (o['@graph']) unwrap(o['@graph']);
           }
+        };
+        unwrap(root);
+        for (const n of nodes) {
+          const v = pick(n);
+          if (v !== null && v !== undefined && v !== '') return v;
         }
       } catch {}
     }
-    // Meta
-    const metaPrice = document.querySelector('meta[property="product:price:amount"]')?.content;
-    if (metaPrice) return parseFloat(metaPrice.replace(',', '.'));
+    return null;
+  }
 
-    // DOM: find elements containing "R$"
-    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
-    const prices = [];
-    let node;
-    while ((node = walker.nextNode())) {
-      const match = node.textContent.match(/R\$\s*([\d.,]+)/);
-      if (match) {
-        const val = parseFloat(match[1].replace(/\./g, '').replace(',', '.'));
-        if (val > 0) prices.push(val);
+  // ── Parse Brazilian price string ─────────────────────────────────────────
+  function parsePrice(str) {
+    if (!str) return 0;
+    const m = str.match(/[\d.,]+/);
+    if (!m) return 0;
+    const raw = m[0];
+    if (/\d{1,3}(\.\d{3})+(,\d{2})?$/.test(raw))
+      return parseFloat(raw.replace(/\./g, '').replace(',', '.'));
+    if (raw.includes(','))
+      return parseFloat(raw.replace(/\./g, '').replace(',', '.'));
+    return parseFloat(raw) || 0;
+  }
+
+  // ── VTEX __STATE__ price fallback ────────────────────────────────────────
+  function getVtexPrice() {
+    try {
+      const state = window.__STATE__;
+      if (!state) return null;
+      for (const key of Object.keys(state)) {
+        const node = state[key];
+        if (node?.selling?.price) return node.selling.price / 100;
+        if (node?.spotPrice)      return node.spotPrice;
       }
-    }
-    // Return the most common or first reasonable price
-    return prices.filter(p => p < 50000)[0] || 0;
+    } catch {}
+    return null;
   }
 
-  // ── SKU ──
-  function getSKU() {
-    const ld = document.querySelector('script[type="application/ld+json"]');
-    if (ld) {
-      try {
-        const data = JSON.parse(ld.textContent);
-        const arr = Array.isArray(data) ? data : [data];
-        for (const item of arr) {
-          if (item.sku) return String(item.sku);
-          if (item.mpn) return String(item.mpn);
-        }
-      } catch {}
+  const host = location.hostname.replace(/^www\./, '');
+
+  // ── Name ─────────────────────────────────────────────────────────────────
+  function getName() {
+    if (host.includes('leroymerlin')) {
+      const el = document.querySelector('[data-testid="product-name"], h1[class*="title"], h1[class*="product"]');
+      if (el?.innerText) return el.innerText.trim();
     }
-    // Look for SKU in page text
-    const match = document.body.innerText.match(/(?:SKU|Cód\.?|Código|Ref\.?)[:\s#]*([A-Z0-9\-]{4,20})/i);
-    return match ? match[1] : '';
+    if (host.includes('samsung')) {
+      const el = document.querySelector('.pd-title, h1[class*="title"], h1[class*="product"]');
+      if (el?.innerText) return el.innerText.trim();
+    }
+    if (host.includes('electrolux') || host.includes('brastemp')) {
+      const el = document.querySelector('h1[class*="product"], h1[class*="name"], h1');
+      if (el?.innerText) return el.innerText.trim();
+    }
+    if (host.includes('dexco') || host.includes('deca.')) {
+      const el = document.querySelector('h1[class*="product"], h1[class*="title"], h1');
+      if (el?.innerText) return el.innerText.trim();
+    }
+
+    const og = document.querySelector('meta[property="og:title"]')?.content?.trim();
+    if (og && og.length > 3) return og;
+
+    const h1 = document.querySelector('h1');
+    if (h1) return h1.innerText.trim();
+
+    return document.title.split(/[|\-–·]/)[0].trim();
   }
 
-  // ── Brand ──
+  // ── Brand ────────────────────────────────────────────────────────────────
   function getBrand() {
-    const meta = document.querySelector('meta[property="product:brand"]')?.content
+    const fromMeta = document.querySelector('meta[property="product:brand"]')?.content
       || document.querySelector('meta[itemprop="brand"]')?.content;
-    if (meta) return meta;
-    const ld = document.querySelector('script[type="application/ld+json"]');
-    if (ld) {
-      try {
-        const data = JSON.parse(ld.textContent);
-        const arr = Array.isArray(data) ? data : [data];
-        for (const item of arr) {
-          if (item.brand?.name) return item.brand.name;
-          if (typeof item.brand === 'string') return item.brand;
-        }
-      } catch {}
-    }
+    if (fromMeta) return fromMeta.trim();
+
+    const fromLD = fromJsonLD(d => {
+      if (d?.brand?.name) return d.brand.name;
+      if (typeof d?.brand === 'string' && d.brand) return d.brand;
+      return null;
+    });
+    if (fromLD) return fromLD;
+
+    const el = document.querySelector(
+      '[data-testid="brand-name"], [class*="product-brand"], [class*="brandName"], [itemprop="brand"]'
+    );
+    if (el?.innerText) return el.innerText.trim();
+
     return '';
   }
 
-  // ── Name ──
-  function getName() {
-    const og = document.querySelector('meta[property="og:title"]')?.content;
-    if (og) return og.trim();
-    const h1 = document.querySelector('h1');
-    if (h1) return h1.innerText.trim();
-    return document.title.split('|')[0].trim();
+  // ── SKU ──────────────────────────────────────────────────────────────────
+  function getSKU() {
+    const fromLD = fromJsonLD(d => d?.sku || d?.mpn || null);
+    if (fromLD) return String(fromLD);
+
+    const m = document.body.innerText.match(/(?:SKU|Cód\.?|Código|Referência|Ref\.?|Art\.?)[:\s#]*([A-Z0-9\-]{4,20})/i);
+    return m ? m[1].trim() : '';
+  }
+
+  // ── Price ────────────────────────────────────────────────────────────────
+  function getPrice() {
+    // 1. JSON-LD — pick lowest offer price
+    const ldPrice = fromJsonLD(d => {
+      const offers = d?.offers || d?.Offers;
+      if (!offers) return null;
+      const arr = Array.isArray(offers) ? offers : [offers];
+      const ps = arr
+        .map(o => parseFloat(String(o?.price ?? o?.lowPrice ?? 0).replace(',', '.')))
+        .filter(p => p > 0);
+      return ps.length ? Math.min(...ps) : null;
+    });
+    if (ldPrice && ldPrice > 0) return ldPrice;
+
+    // 2. Meta tag
+    const metaP = document.querySelector('meta[property="product:price:amount"]')?.content;
+    if (metaP) { const v = parseFloat(metaP.replace(',', '.')); if (v > 0) return v; }
+
+    // 3. VTEX __STATE__
+    const vtex = getVtexPrice();
+    if (vtex && vtex > 0) return vtex;
+
+    // 4. Site-specific selectors
+    const SITE_PRICE_SEL = {
+      'telhanorte':    '.priceSpot, [class*="priceSpot"], [class*="price-spot"], .valoper__price',
+      'obrafacil':     '.price-spot, .price__selling, [class*="sellingPrice"]',
+      'abcconstrucao': '.price-spot, .product-price, [class*="price"]',
+      'leroymerlin':   '[data-testid="price"], [class*="sellingPrice"], [class*="price__selling"]',
+      'andra':         '.price, [class*="product-price"], [class*="sellingPrice"]',
+      'inspirehome':   '.price, [class*="product-price"]',
+      'yamamura':      '.price, [class*="product-price"], [class*="sellingPrice"]',
+      'belametais':    '.price, [class*="product-price"]',
+      'tokstok':       '[class*="spotPrice"], [class*="priceContainer"] .price',
+      'westwing':      '[class*="ProductPrice"], [class*="price__selling"]',
+      'boobam':        '.price, [class*="product-price"], [class*="sellingPrice"]',
+      'camicado':      '[class*="spotPrice"], [class*="sellingPrice"]',
+      'muma':          '.price, [class*="product-price"]',
+      'dexco':         '.price, [class*="product-price"]',
+      'deca.':         '.price, [class*="product-price"]',
+      'electrolux':    '[class*="product-price"], [class*="price-info"], .price',
+      'fastshop':      '[class*="bestPrice"], [class*="price-best"], .price',
+      'brastemp':      '[class*="product-price"], [class*="price-info"], .price',
+      'samsung':       '[class*="price-info"], [class*="pd-price"], [class*="price"]',
+    };
+
+    for (const [key, sel] of Object.entries(SITE_PRICE_SEL)) {
+      if (host.includes(key)) {
+        const el = document.querySelector(sel);
+        if (el) { const v = parsePrice(el.textContent); if (v > 0) return v; }
+        break;
+      }
+    }
+
+    // 5. Walk text nodes — pick most frequent R$ value
+    const prices = [];
+    const walk = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    let node;
+    while ((node = walk.nextNode())) {
+      const m = node.textContent.match(/R\$\s*([\d.,]+)/);
+      if (m) {
+        const v = parsePrice(m[1]);
+        if (v > 0 && v < 500000) prices.push(v);
+      }
+    }
+    if (prices.length > 0) {
+      const freq = {};
+      prices.forEach(v => freq[v] = (freq[v] || 0) + 1);
+      return parseFloat(Object.entries(freq).sort((a, b) => b[1] - a[1])[0][0]);
+    }
+
+    return 0;
+  }
+
+  // ── Image ────────────────────────────────────────────────────────────────
+  function getBestImage() {
+    const og = document.querySelector('meta[property="og:image"]')?.content;
+    if (og && !/logo|icon/.test(og.toLowerCase())) return og;
+
+    const ldImg = fromJsonLD(d => {
+      if (typeof d?.image === 'string' && d.image) return d.image;
+      if (d?.image?.url) return d.image.url;
+      if (Array.isArray(d?.image) && d.image.length)
+        return typeof d.image[0] === 'string' ? d.image[0] : (d.image[0]?.url || null);
+      return null;
+    });
+    if (ldImg) return ldImg;
+
+    const candidates = [...document.images]
+      .map(img => ({
+        src: img.src || img.dataset.src || img.dataset.lazySrc || img.dataset.original || '',
+        area: img.naturalWidth * img.naturalHeight,
+        ratio: img.naturalWidth / (img.naturalHeight || 1),
+      }))
+      .filter(({ src, area, ratio }) => {
+        if (!src || area < 150 * 150) return false;
+        if (/logo|icon|sprite|banner|badge|avatar|header|footer/.test(src.toLowerCase())) return false;
+        return ratio >= 0.4 && ratio <= 2.5;
+      })
+      .sort((a, b) => b.area - a.area);
+
+    return candidates[0]?.src || '';
   }
 
   return {

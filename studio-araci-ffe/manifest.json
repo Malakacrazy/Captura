@@ -10,16 +10,7 @@
     "tabs"
   ],
   "host_permissions": [
-    "https://www.leroymerlin.com.br/*",
-    "https://www.tokstok.com.br/*",
-    "https://www.etna.com.br/*",
-    "https://www.casasbahia.com.br/*",
-    "https://www.mobly.com.br/*",
-    "https://www.westwing.com.br/*",
-    "https://www.arvoredesign.com.br/*",
-    "https://www.oppa.com.br/*",
-    "https://www.americanas.com.br/*",
-    "https://www.amazon.com.br/*"
+    "<all_urls>"
   ],
   "action": {
     "default_popup": "popup.html",
@@ -32,18 +23,7 @@
   },
   "content_scripts": [
     {
-      "matches": [
-        "https://www.leroymerlin.com.br/*",
-        "https://www.tokstok.com.br/*",
-        "https://www.etna.com.br/*",
-        "https://www.casasbahia.com.br/*",
-        "https://www.mobly.com.br/*",
-        "https://www.westwing.com.br/*",
-        "https://www.arvoredesign.com.br/*",
-        "https://www.oppa.com.br/*",
-        "https://www.americanas.com.br/*",
-        "https://www.amazon.com.br/*"
-      ],
+      "matches": ["<all_urls>"],
       "js": ["content.js"],
       "css": ["content.css"]
     }
