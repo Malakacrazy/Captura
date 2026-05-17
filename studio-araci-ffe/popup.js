@@ -319,14 +319,18 @@ $('captureBtn').addEventListener('click', async () => {
 
 function guessCategory(name) {
   const n = name.toLowerCase();
-  if (/piso|cerâmic|porcelana|revestimento|argamassa|rejunte|tijolet|pedra|mármo|granito|parquet|laminado|deck/.test(n))
+  if (/piso|cerâmic|porcelan|revestimento|argamassa|rejunte|tijolet|pedra|mármo|granito|parquet|laminado|deck|azulejo|grês/.test(n))
     return 'revestimentos';
-  if (/vaso|sanitário|cuba|torneira|ducha|chuveiro|bacia|sifão|mictório|válvula|box|espelho|banheira|fechadura|cadeado/.test(n))
+  if (/vaso sanitário|bacia sanitária|cuba|torneira|ducha|chuveiro|sifão|mictório|válvula|box|banheira|fechadura|cadeado|registro|misturador|metalic/.test(n))
     return 'loucas-metais';
-  if (/luminária|lâmpada|lustre|arandela|spot|trilho|pendente|led|interruptor|tomada|cortina|persiana|tapete|quadro|vaso decorat|planta/.test(n))
+  if (/luminária|lâmpada|lustre|arandela|spot|trilho|pendente|led|plafon/.test(n))
     return 'iluminacao';
-  if (/toalha|roupa|cama|lençol|fronha|edredom|almofada|colchão|travesseiro|enxoval/.test(n))
-    return 'enxoval';
+  if (/geladeira|refrigerador|fogão|forno|microondas|máquina de lavar|máquina de secar|lava.louça|lavadora|secadora|air fryer|aspirador|purificador|climatizador|ar condicionado|ventilador|exaustor|coifa|cooktop/.test(n))
+    return 'eletros';
+  if (/sofá|poltrona|mesa|cadeira|cama|colchão|armário|guarda.roupa|estante|rack|prateleira|criado.mudo|aparador|buffet|escrivaninha|banco|pufe|cabeceira|penteadeira/.test(n))
+    return 'moveis';
+  if (/tapete|quadro|almofada|cortina|persiana|espelho|toalha|lençol|fronha|edredom|travesseiro|enxoval|roupa de cama|vaso decorat|planta|interruptor|tomada|decoração|objeto decorat/.test(n))
+    return 'decoracao-enxoval';
   return 'outros';
 }
 
