@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Orçamento FF&E · Studio Araci</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,400&family=Jost:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+  <style>
+    :root {
+      --ferrugem:  #A35940;
+      --terracota: #9F4F39;
+      --cacau:     #B36C51;
+      --baleia:    #5E6979;
+      --areia:     #E8DED4;
+      --duna:      #CDB8A3;
+      --grafite:   #454D59;
+      --bg:        #F5F0EB;
+      --text:      #2E2620;
+      --muted:     #7A6A60;
+
+      /* Category colors */
+      --cat-rev:  #9F4F39;
+      --cat-lou:  #5E6979;
+      --cat-ilu:  #AA9C79;
+      --cat-enx:  #B36C51;
+      --cat-out:  #9AA09A;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #ccc5bc;
+      font-family: 'Jost', system-ui, sans-serif;
+      color: var(--text);
+      min-height: 100vh;
+      padding: 32px 0 80px;
+    }
+
+    /* Print controls — screen only */
+    .print-bar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 100;
+      background: var(--grafite);
+      padding: 10px 24px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .pb-title { color: rgba(255,255,255,0.7); font-size: 13px; flex: 1; }
+    .pb-btn {
+      padding: 7px 18px;
+      border-radius: 5px;
+      font-family: 'Jost', sans-serif;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      border: none;
+      transition: all 0.15s;
+      letter-spacing: 0.03em;
+    }
+    .pb-btn.primary { background: var(--ferrugem); color: #fff; }
+    .pb-btn.primary:hover { background: var(--terracota); }
+    .pb-btn.secondary { background: rgba(255,255,255,0.12); color: #fff; border: 1px solid rgba(255,255,255,0.2); }
+    .pb-btn.secondary:hover { background: rgba(255,255,255,0.2); }
+    .pb-hint { color: rgba(255,255,255,0.5); font-size: 11.5px; }
+
+    /* A4 page */
+    .page {
+      width: 794px;
+      min-height: 1123px;
+      margin: 52px auto 0;
+      background: #fff;
+      box-shadow: 0 12px 56px rgba(0,0,0,0.22);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .accent-top {
+      height: 5px;
+      background: linear-gradient(90deg, var(--ferrugem) 0%, var(--cacau) 55%, var(--duna) 100%);
+    }
+
+    /* Header */
+    .header {
+      padding: 34px 52px 26px;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--areia);
+    }
+
+    .logo-block { display: flex; align-items: center; gap: 16px; }
+    .logo-svg { width: 58px; height: 58px; }
+
+    .logo-name {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 20px;
+      font-weight: 400;
+      letter-spacing: 0.22em;
+      color: var(--ferrugem);
+      text-transform: uppercase;
+    }
+    .logo-tagline {
+      font-family: 'Jost', sans-serif;
+      font-size: 8px;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-top: 3px;
+    }
+
+    .doc-info { text-align: right; }
+    .doc-eyebrow { font-size: 9px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+    .doc-type { font-family: 'Cormorant Garamond', serif; font-size: 26px; font-weight: 300; color: var(--text); }
+    .doc-date { font-size: 12px; color: var(--muted); margin-top: 5px; }
+
+    /* Project */
+    .project-bar {
+      background: var(--bg);
+      padding: 14px 52px;
+      border-bottom: 1px solid var(--areia);
+    }
+    .proj-label { font-size: 9px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); font-weight: 500; margin-bottom: 2px; }
+    .proj-name  { font-family: 'Cormorant Garamond', serif; font-size: 20px; color: var(--text); }
+
+    /* Summary */
+    .summary { display: flex; padding: 24px 52px; gap: 14px; border-bottom: 2px solid var(--areia); }
+    .sum-card { flex: 1; border: 1px solid var(--areia); border-radius: 5px; padding: 14px 18px; }
+    .sum-card.primary { background: var(--ferrugem); border-color: var(--ferrugem); }
+    .sum-lbl { font-size: 8.5px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+    .sum-card.primary .sum-lbl { color: rgba(255,255,255,0.65); }
+    .sum-val { font-family: 'Cormorant Garamond', serif; font-size: 26px; color: var(--text); line-height: 1; margin-top: 3px; }
+    .sum-card.primary .sum-val { color: #fff; font-size: 22px; }
+
+    /* Category sections */
+    .sections { padding: 0 52px 36px; flex: 1; }
+
+    .cat-section { margin-top: 28px; }
+
+    .cat-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 0;
+    }
+    .cat-line { flex: 1; height: 1px; }
+    .cat-label {
+      font-size: 9px;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      font-weight: 700;
+      padding: 3px 12px;
+      border-radius: 20px;
+      color: #fff;
+    }
+    .cat-count { font-size: 10px; color: var(--muted); }
+
+    .cat-label.revestimentos, .cat-line.revestimentos { background: var(--cat-rev); }
+    .cat-label.loucas-metais, .cat-line.loucas-metais  { background: var(--cat-lou); }
+    .cat-label.iluminacao,    .cat-line.iluminacao     { background: var(--cat-ilu); }
+    .cat-label.enxoval,       .cat-line.enxoval        { background: var(--cat-enx); }
+    .cat-label.outros,        .cat-line.outros         { background: var(--cat-out); }
+
+    .cat-line { height: 1px; opacity: 0.35; }
+
+    /* Table */
+    .table-header {
+      display: grid;
+      grid-template-columns: 52px 1fr 50px 90px 90px;
+      gap: 10px;
+      padding: 8px 12px;
+      background: var(--grafite);
+      color: #fff;
+      border-radius: 4px 4px 0 0;
+      font-size: 8.5px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      font-weight: 500;
+      align-items: center;
+      margin-top: 8px;
+    }
+
+    .table-row {
+      display: grid;
+      grid-template-columns: 52px 1fr 50px 90px 90px;
+      gap: 10px;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--areia);
+      align-items: center;
+    }
+    .table-row:nth-child(even) { background: var(--bg); }
+
+    .prod-img {
+      width: 48px;
+      height: 48px;
+      object-fit: contain;
+      border-radius: 3px;
+      background: var(--areia);
+      image-orientation: from-image;
+      display: block;
+    }
+    .prod-img-ph {
+      width: 48px;
+      height: 48px;
+      border-radius: 3px;
+      background: var(--areia);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      color: var(--duna);
+    }
+
+    .prod-name-print { font-size: 12.5px; font-weight: 500; color: var(--text); line-height: 1.35; margin-bottom: 2px; }
+    .prod-meta-print { font-size: 10px; color: var(--muted); }
+    .prod-meta-print a { color: var(--ferrugem); text-decoration: none; }
+
+    .col-center { text-align: center; font-size: 13px; font-weight: 500; }
+    .col-right  { text-align: right; font-size: 12.5px; }
+    .col-total  { text-align: right; font-size: 13px; font-weight: 700; color: var(--ferrugem); }
+
+    /* Category subtotal */
+    .cat-subtotal {
+      display: flex;
+      justify-content: flex-end;
+      align-items: baseline;
+      gap: 10px;
+      padding: 6px 12px 0;
+      font-size: 11px;
+    }
+    .cat-sub-label { color: var(--muted); letter-spacing: 0.06em; text-transform: uppercase; font-size: 9px; }
+    .cat-sub-value { font-weight: 600; color: var(--text); font-size: 13px; }
+
+    /* Grand total */
+    .grand-total-row {
+      margin: 20px 52px 0;
+      background: var(--bg);
+      border: 1px solid var(--areia);
+      border-radius: 5px;
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      padding: 14px 20px;
+    }
+    .gt-label { font-size: 9.5px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+    .gt-value { font-family: 'Cormorant Garamond', serif; font-size: 28px; font-weight: 600; color: var(--ferrugem); }
+
+    /* Footer */
+    .footer {
+      margin-top: auto;
+      padding: 22px 52px 28px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      border-top: 1px solid var(--areia);
+    }
+    .footer-note { font-size: 9px; color: var(--muted); line-height: 1.7; max-width: 340px; }
+    .footer-brand-name { font-family: 'Cormorant Garamond', serif; font-size: 12px; font-weight: 400; letter-spacing: 0.2em; text-transform: uppercase; color: var(--ferrugem); }
+    .footer-tagline { font-size: 7.5px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--muted); margin-top: 2px; }
+
+    .accent-bottom {
+      height: 4px;
+      background: linear-gradient(90deg, var(--duna) 0%, var(--cacau) 50%, var(--ferrugem) 100%);
+    }
+
+    /* Print media */
+    @media print {
+      body { background: none; padding: 0; }
+      .print-bar { display: none; }
+      .page { margin: 0; width: 100%; box-shadow: none; min-height: auto; }
+
+      @page {
+        size: A4;
+        margin: 0;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Screen-only print bar -->
+  <div class="print-bar">
+    <span class="pb-title">Studio Araci · Orçamento FF&amp;E — pronto para imprimir</span>
+    <span class="pb-hint">Dica: escolha "Salvar como PDF" na impressora</span>
+    <button class="pb-btn secondary" id="backBtn">← Fechar</button>
+    <button class="pb-btn primary" id="printBtn">⬇ Salvar PDF</button>
+  </div>
+
+  <div class="page">
+    <div class="accent-top"></div>
+
+    <!-- Header -->
+    <header class="header">
+      <div class="logo-block">
+        <svg class="logo-svg" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="50" cy="50" r="46" fill="none" stroke="#E8DED4" stroke-width="1.5"/>
+          <g transform="translate(50,50)">
+            <path d="M2,-32 C20,-26 32,-10 26,6 C20,22 5,28 -7,20" fill="none" stroke="#A35940" stroke-width="7.5" stroke-linecap="round"/>
+            <path d="M2,-32 C20,-26 32,-10 26,6 C20,22 5,28 -7,20" fill="none" stroke="#A35940" stroke-width="7.5" stroke-linecap="round" transform="rotate(72)"/>
+            <path d="M2,-32 C20,-26 32,-10 26,6 C20,22 5,28 -7,20" fill="none" stroke="#A35940" stroke-width="7.5" stroke-linecap="round" transform="rotate(144)"/>
+            <path d="M2,-32 C20,-26 32,-10 26,6 C20,22 5,28 -7,20" fill="none" stroke="#A35940" stroke-width="7.5" stroke-linecap="round" transform="rotate(216)"/>
+            <path d="M2,-32 C20,-26 32,-10 26,6 C20,22 5,28 -7,20" fill="none" stroke="#A35940" stroke-width="7.5" stroke-linecap="round" transform="rotate(288)"/>
+          </g>
+        </svg>
+        <div>
+          <div class="logo-name">Studio Araci</div>
+          <div class="logo-tagline">Tudo começa pelo que você sente</div>
+        </div>
+      </div>
+      <div class="doc-info">
+        <div class="doc-eyebrow">Documento</div>
+        <div class="doc-type">Orçamento FF&amp;E</div>
+        <div class="doc-date" id="docDate"></div>
+      </div>
+    </header>
+
+    <!-- Project -->
+    <div class="project-bar" id="projectBar">
+      <div class="proj-label">Projeto</div>
+      <div class="proj-name" id="projName"></div>
+    </div>
+
+    <!-- Summary -->
+    <div class="summary">
+      <div class="sum-card">
+        <div class="sum-lbl">Produtos</div>
+        <div class="sum-val" id="sumProducts">—</div>
+      </div>
+      <div class="sum-card">
+        <div class="sum-lbl">Unidades</div>
+        <div class="sum-val" id="sumUnits">—</div>
+      </div>
+      <div class="sum-card primary">
+        <div class="sum-lbl">Total do Orçamento</div>
+        <div class="sum-val" id="sumTotal">—</div>
+      </div>
+    </div>
+
+    <!-- Product sections (rendered by JS) -->
+    <div class="sections" id="sections"></div>
+
+    <!-- Grand total -->
+    <div class="grand-total-row">
+      <span class="gt-label">Total Geral</span>
+      <span class="gt-value" id="grandTotal">—</span>
+    </div>
+
+    <!-- Spacer -->
+    <div style="flex:1;min-height:32px"></div>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <div class="footer-note">
+        Este orçamento tem caráter referencial e está sujeito a alterações de preço e disponibilidade de estoque.<br/>
+        Gerado por Studio Araci · Arquitetura e Design de Interiores.
+      </div>
+      <div>
+        <div class="footer-brand-name">Studio Araci</div>
+        <div class="footer-tagline">Tudo começa pelo que você sente</div>
+      </div>
+    </footer>
+
+    <div class="accent-bottom"></div>
+  </div>
+
+  <script src="print.js"></script>
+</body>
+</html>

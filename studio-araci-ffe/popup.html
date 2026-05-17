@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Studio Araci · Orçamento</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --ferrugem:  #A35940;
+      --terracota: #9F4F39;
+      --cacau:     #B36C51;
+      --baleia:    #5E6979;
+      --areia:     #E8DED4;
+      --areia-dark:#D6C9BC;
+      --duna:      #CDB8A3;
+      --bg:        #F5F0EB;
+      --text:      #2E2620;
+      --muted:     #7A6A60;
+      --border:    #DDD0C4;
+    }
+
+    body {
+      width: 420px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+      font-size: 13px;
+    }
+
+    /* Header */
+    .header { background: var(--ferrugem); padding: 11px 14px; display: flex; align-items: center; gap: 10px; }
+    .hdr-logo { width: 30px; height: 30px; flex-shrink: 0; }
+    .hdr-text { flex: 1; }
+    .hdr-studio { color: rgba(255,255,255,0.72); font-size: 9.5px; letter-spacing: 0.14em; text-transform: uppercase; }
+    .hdr-title  { color: #fff; font-size: 14px; font-weight: 600; }
+    .hdr-count  { text-align: right; }
+    .cnt-num { color: #fff; font-size: 20px; font-weight: 700; line-height: 1; }
+    .cnt-lbl { color: rgba(255,255,255,0.6); font-size: 9px; letter-spacing: 0.06em; text-transform: uppercase; }
+
+    /* Project */
+    .project-bar { background: var(--areia-dark); padding: 7px 14px; display: flex; gap: 8px; align-items: center; border-bottom: 1px solid var(--border); }
+    .project-bar label { font-size: 9.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
+    .project-bar input { flex: 1; border: none; background: transparent; font-size: 12.5px; color: var(--text); outline: none; font-family: inherit; }
+
+    /* Category tabs */
+    .cat-tabs { background: #fff; padding: 0 12px; border-bottom: 1px solid var(--border); display: flex; overflow-x: auto; scrollbar-width: none; }
+    .cat-tabs::-webkit-scrollbar { display: none; }
+    .cat-tab { padding: 6px 9px; font-size: 10.5px; font-weight: 500; color: var(--muted); cursor: pointer; border: none; border-bottom: 2px solid transparent; white-space: nowrap; transition: all 0.13s; background: none; font-family: inherit; }
+    .cat-tab:hover { color: var(--text); }
+    .cat-tab.active { color: var(--ferrugem); border-bottom-color: var(--ferrugem); font-weight: 700; }
+
+    /* Status */
+    .status-bar { font-size: 11.5px; padding: 5px 12px; display: none; }
+    .status-bar.ok   { display: block; background: #f0faf5; color: #166534; border-bottom: 1px solid #bbf7d0; }
+    .status-bar.warn { display: block; background: #fff7ed; color: #9a3412; border-bottom: 1px solid #fed7aa; }
+    .status-bar.info { display: block; background: #eff6ff; color: #1d4ed8; border-bottom: 1px solid #bfdbfe; }
+
+    /* Product list */
+    .product-list { max-height: 340px; overflow-y: auto; }
+    .product-list::-webkit-scrollbar { width: 4px; }
+    .product-list::-webkit-scrollbar-thumb { background: var(--duna); border-radius: 2px; }
+
+    .product-item { display: flex; align-items: flex-start; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--border); background: #fff; transition: background 0.1s; }
+    .product-item:hover { background: var(--bg); }
+
+    .prod-img-wrap { width: 42px; height: 42px; flex-shrink: 0; border-radius: 4px; overflow: hidden; background: var(--areia); display: flex; align-items: center; justify-content: center; }
+    .prod-img-wrap img { width: 100%; height: 100%; object-fit: contain; image-orientation: from-image; display: block; }
+
+    .prod-body { flex: 1; min-width: 0; }
+    .prod-name { font-size: 11.5px; font-weight: 500; color: var(--text); line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .prod-meta { font-size: 10px; color: var(--muted); margin-top: 1px; }
+
+    .prod-cat-wrap { margin-top: 4px; display: flex; align-items: center; gap: 5px; }
+    .cat-badge { display: inline-block; padding: 1px 7px; border-radius: 20px; font-size: 9.5px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: #fff; cursor: pointer; border: none; font-family: inherit; line-height: 1.6; }
+    .cat-badge.revestimentos { background: #9F4F39; }
+    .cat-badge.loucas-metais  { background: #5E6979; }
+    .cat-badge.iluminacao     { background: #AA9C79; }
+    .cat-badge.enxoval        { background: #B36C51; }
+    .cat-badge.outros         { background: #9AA09A; }
+
+    .cat-inline-select { display: none; font-size: 10.5px; border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; background: var(--bg); color: var(--text); font-family: inherit; outline: none; }
+    .cat-inline-select.visible { display: inline-block; }
+
+    .prod-right { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex-shrink: 0; }
+    .prod-price { font-size: 12px; font-weight: 700; color: var(--ferrugem); }
+    .prod-controls { display: flex; align-items: center; gap: 3px; }
+
+    .qty-btn { width: 20px; height: 20px; border: 1px solid var(--border); background: var(--bg); border-radius: 3px; cursor: pointer; font-size: 13px; display: flex; align-items: center; justify-content: center; color: var(--text); transition: all 0.12s; font-family: inherit; line-height: 1; }
+    .qty-btn:hover { background: var(--ferrugem); color: #fff; border-color: var(--ferrugem); }
+    .qty-val { font-size: 12px; font-weight: 600; width: 18px; text-align: center; }
+
+    .del-btn { width: 20px; height: 20px; border: none; background: transparent; cursor: pointer; color: var(--duna); display: flex; align-items: center; justify-content: center; border-radius: 3px; margin-left: 2px; transition: all 0.12s; font-family: inherit; font-size: 12px; }
+    .del-btn:hover { background: #fee2e2; color: #dc2626; }
+
+    /* Empty */
+    .empty-state { padding: 28px 20px; text-align: center; color: var(--muted); }
+    .empty-icon { font-size: 30px; margin-bottom: 8px; }
+    .empty-state p { font-size: 12px; line-height: 1.6; }
+    .empty-state strong { color: var(--text); }
+
+    /* Footer */
+    .footer { background: #fff; border-top: 1px solid var(--border); padding: 8px 12px; }
+    .total-row { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 7px; }
+    .total-label { font-size: 9.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+    .total-value { font-size: 17px; font-weight: 700; color: var(--ferrugem); }
+
+    .btn-row { display: flex; gap: 5px; }
+    .btn { flex: 1; padding: 8px 8px; border-radius: 5px; font-size: 11.5px; font-weight: 600; letter-spacing: 0.02em; cursor: pointer; border: none; transition: all 0.12s; font-family: inherit; }
+    .btn-primary { background: var(--ferrugem); color: #fff; }
+    .btn-primary:hover { background: var(--terracota); }
+    .btn-primary:disabled { background: var(--duna); cursor: not-allowed; }
+    .btn-secondary { background: var(--bg); color: var(--text); border: 1px solid var(--border); flex: 0 0 auto; }
+    .btn-secondary:hover { background: var(--areia); }
+
+    /* Add form */
+    .add-form { background: var(--areia); border-top: 1px solid var(--border); padding: 10px 12px; display: none; }
+    .add-form.open { display: block; }
+    .add-form-title { font-size: 9.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-bottom: 7px; }
+    .form-row { display: flex; gap: 5px; margin-bottom: 5px; }
+    .form-input { flex: 1; border: 1px solid var(--border); border-radius: 4px; padding: 6px 8px; font-size: 12px; background: #fff; font-family: inherit; color: var(--text); outline: none; }
+    .form-input:focus { border-color: var(--ferrugem); }
+    .form-input.sm { flex: 0 0 60px; }
+    .form-input.md { flex: 0 0 86px; }
+    .form-select { flex: 1; border: 1px solid var(--border); border-radius: 4px; padding: 6px 8px; font-size: 12px; background: #fff; font-family: inherit; color: var(--text); outline: none; }
+  </style>
+</head>
+<body>
+
+  <header class="header">
+    <svg class="hdr-logo" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="50" cy="50" r="46" fill="rgba(255,255,255,0.15)"/>
+      <g transform="translate(50,50)">
+        <path d="M2,-30 C18,-24 30,-9 24,7 C18,22 4,27 -6,19" fill="none" stroke="rgba(255,255,255,0.95)" stroke-width="7" stroke-linecap="round"/>
+        <path d="M2,-30 C18,-24 30,-9 24,7 C18,22 4,27 -6,19" fill="none" stroke="rgba(255,255,255,0.95)" stroke-width="7" stroke-linecap="round" transform="rotate(72)"/>
+        <path d="M2,-30 C18,-24 30,-9 24,7 C18,22 4,27 -6,19" fill="none" stroke="rgba(255,255,255,0.95)" stroke-width="7" stroke-linecap="round" transform="rotate(144)"/>
+        <path d="M2,-30 C18,-24 30,-9 24,7 C18,22 4,27 -6,19" fill="none" stroke="rgba(255,255,255,0.95)" stroke-width="7" stroke-linecap="round" transform="rotate(216)"/>
+        <path d="M2,-30 C18,-24 30,-9 24,7 C18,22 4,27 -6,19" fill="none" stroke="rgba(255,255,255,0.95)" stroke-width="7" stroke-linecap="round" transform="rotate(288)"/>
+      </g>
+    </svg>
+    <div class="hdr-text">
+      <div class="hdr-studio">Studio Araci</div>
+      <div class="hdr-title">Orçamento FF&amp;E</div>
+    </div>
+    <div class="hdr-count">
+      <div class="cnt-num" id="prodCount">0</div>
+      <div class="cnt-lbl">itens</div>
+    </div>
+  </header>
+
+  <div class="project-bar">
+    <label>Projeto</label>
+    <input type="text" id="projectName" placeholder="Ex: Sala de estar – Cliente X"/>
+  </div>
+
+  <div class="cat-tabs" id="catTabs">
+    <button class="cat-tab active" data-cat="all">Todos</button>
+    <button class="cat-tab" data-cat="revestimentos">Revestimentos</button>
+    <button class="cat-tab" data-cat="loucas-metais">Louças &amp; Metais</button>
+    <button class="cat-tab" data-cat="iluminacao">Iluminação &amp; Dec.</button>
+    <button class="cat-tab" data-cat="enxoval">Enxoval</button>
+    <button class="cat-tab" data-cat="outros">Outros</button>
+  </div>
+
+  <div class="status-bar" id="statusBar"></div>
+
+  <div class="product-list" id="productList">
+    <div class="empty-state" id="emptyState">
+      <div class="empty-icon">🛋</div>
+      <p>Nenhum produto ainda.<br/>
+      <strong>Navegue em uma loja</strong> e clique em "+ Orçamento",<br/>
+      ou use o botão abaixo para adicionar manualmente.</p>
+    </div>
+  </div>
+
+  <div class="add-form" id="addForm">
+    <div class="add-form-title">Adicionar produto</div>
+    <div class="form-row">
+      <input class="form-input" id="f-name" type="text" placeholder="Nome do produto (obrigatório)"/>
+    </div>
+    <div class="form-row">
+      <input class="form-input" id="f-brand" type="text" placeholder="Marca"/>
+      <input class="form-input sm" id="f-sku" type="text" placeholder="SKU"/>
+    </div>
+    <div class="form-row">
+      <input class="form-input md" id="f-price" type="number" step="0.01" min="0" placeholder="R$ Preço"/>
+      <input class="form-input sm" id="f-qty" type="number" min="1" value="1"/>
+      <select class="form-select" id="f-cat">
+        <option value="revestimentos">Revestimentos</option>
+        <option value="loucas-metais">Louças e Metais</option>
+        <option value="iluminacao">Iluminação &amp; Dec.</option>
+        <option value="enxoval">Enxoval</option>
+        <option value="outros" selected>Outros</option>
+      </select>
+    </div>
+    <div class="form-row">
+      <button class="btn btn-secondary" id="addManualBtn" style="flex:1;padding:7px">Adicionar à Lista</button>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div class="total-row">
+      <span class="total-label">Total do Orçamento</span>
+      <span class="total-value" id="totalValue">R$ 0,00</span>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-secondary" id="toggleAddBtn" style="padding:8px 10px">+ Manual</button>
+      <button class="btn btn-secondary" id="captureBtn" style="padding:8px 10px">⊕ Capturar</button>
+      <button class="btn btn-secondary" id="clearBtn" style="padding:8px 10px" title="Limpar tudo">🗑</button>
+      <button class="btn btn-primary" id="generateBtn" disabled>Gerar PDF</button>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
