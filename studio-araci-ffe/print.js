@@ -36,11 +36,13 @@ async function triggerPrint() {
 // ─── Categories config ─────────────────────────────────────────────────────
 
 const CATS = [
-  { id: 'revestimentos', label: 'Revestimentos' },
-  { id: 'loucas-metais', label: 'Louças e Metais' },
-  { id: 'iluminacao',    label: 'Iluminação & Decoração' },
-  { id: 'enxoval',      label: 'Enxoval' },
-  { id: 'outros',       label: 'Outros' }
+  { id: 'revestimentos',     label: 'Revestimentos' },
+  { id: 'loucas-metais',     label: 'Louças e Metais' },
+  { id: 'iluminacao',        label: 'Iluminação' },
+  { id: 'eletros',           label: 'Eletros' },
+  { id: 'moveis',            label: 'Móveis' },
+  { id: 'decoracao-enxoval', label: 'Decoração e Enxoval' },
+  { id: 'outros',            label: 'Outros' }
 ];
 
 function fmt(n) {

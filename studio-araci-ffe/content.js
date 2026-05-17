@@ -1,9 +1,8 @@
-// content.js v2 — Studio Araci FF&E · Floating capture button
+// content.js v3 — Studio Araci FF&E · Floating capture button
 
 (function () {
   'use strict';
 
-  // Only inject once
   if (document.getElementById('sa-fab')) return;
 
   // ─── Floating button ─────────────────────────────────────────────────────
@@ -37,7 +36,6 @@
         return;
       }
 
-      // Load current list, append, save
       const storage = await chrome.storage.local.get('products');
       const products = storage.products || [];
       products.push(product);
@@ -55,30 +53,95 @@
   // ─── Product extraction ──────────────────────────────────────────────────
 
   async function extractProduct() {
-    const name  = getName();
-    const brand = getBrand();
-    const sku   = getSKU();
-    const price = getPrice();
-    const img   = getBestImage();
-    const dims  = '';
-    const url   = window.location.href;
-    const id    = Date.now();
-    const qty   = 1;
-    const category = ''; // guessed in popup.js
+    const name     = getName();
+    const brand    = getBrand();
+    const sku      = getSKU();
+    const price    = getPrice();
+    const img      = getBestImage();
+    const url      = window.location.href;
+    const category = guessCategory(name);
 
-    return { id, name, brand, sku, price, img, dims, url, qty, category };
+    return { id: Date.now(), name, brand, sku, price, img, dims: '', url, qty: 1, category };
   }
+
+  // ── JSON-LD helper — searches all scripts, unwraps @graph ─────────────────
+  function fromJsonLD(pick) {
+    for (const s of document.querySelectorAll('script[type="application/ld+json"]')) {
+      try {
+        const root = JSON.parse(s.textContent);
+        const nodes = [];
+        const unwrap = o => {
+          if (Array.isArray(o)) o.forEach(unwrap);
+          else if (o && typeof o === 'object') {
+            nodes.push(o);
+            if (o['@graph']) unwrap(o['@graph']);
+          }
+        };
+        unwrap(root);
+        for (const n of nodes) {
+          const v = pick(n);
+          if (v !== null && v !== undefined && v !== '') return v;
+        }
+      } catch {}
+    }
+    return null;
+  }
+
+  // ── Parse Brazilian price string ──────────────────────────────────────────
+  function parsePrice(str) {
+    if (!str) return 0;
+    const m = str.match(/[\d.,]+/);
+    if (!m) return 0;
+    const raw = m[0];
+    if (/\d{1,3}(\.\d{3})+(,\d{2})?$/.test(raw))
+      return parseFloat(raw.replace(/\./g, '').replace(',', '.'));
+    if (raw.includes(','))
+      return parseFloat(raw.replace(/\./g, '').replace(',', '.'));
+    return parseFloat(raw) || 0;
+  }
+
+  // ── VTEX __STATE__ price fallback ─────────────────────────────────────────
+  function getVtexPrice() {
+    try {
+      const state = window.__STATE__;
+      if (!state) return null;
+      for (const key of Object.keys(state)) {
+        const node = state[key];
+        if (node?.selling?.price) return node.selling.price / 100;
+        if (node?.spotPrice)      return node.spotPrice;
+      }
+    } catch {}
+    return null;
+  }
+
+  const host = location.hostname.replace(/^www\./, '');
 
   // ── Name ──────────────────────────────────────────────────────────────────
   function getName() {
-    // OG title is usually the clean product name
+    if (host.includes('leroymerlin')) {
+      const el = document.querySelector('[data-testid="product-name"], h1[class*="title"], h1[class*="product"]');
+      if (el?.innerText) return el.innerText.trim();
+    }
+    if (host.includes('samsung')) {
+      const el = document.querySelector('.pd-title, h1[class*="title"], h1[class*="product"]');
+      if (el?.innerText) return el.innerText.trim();
+    }
+    if (host.includes('electrolux') || host.includes('brastemp')) {
+      const el = document.querySelector('h1[class*="product"], h1[class*="name"], h1');
+      if (el?.innerText) return el.innerText.trim();
+    }
+    if (host.includes('dexco') || host.includes('deca.')) {
+      const el = document.querySelector('h1[class*="product"], h1[class*="title"], h1');
+      if (el?.innerText) return el.innerText.trim();
+    }
+
     const og = document.querySelector('meta[property="og:title"]')?.content?.trim();
-    if (og && og.length > 4) return og;
+    if (og && og.length > 3) return og;
 
     const h1 = document.querySelector('h1');
     if (h1) return h1.innerText.trim();
 
-    return document.title.split(/[|\-–]/)[0].trim();
+    return document.title.split(/[|\-–·]/)[0].trim();
   }
 
   // ── Brand ─────────────────────────────────────────────────────────────────
@@ -87,8 +150,22 @@
       || document.querySelector('meta[itemprop="brand"]')?.content;
     if (fromMeta) return fromMeta.trim();
 
-    const fromLD = fromJsonLD(d => d?.brand?.name || (typeof d?.brand === 'string' ? d.brand : null));
+    const fromLD = fromJsonLD(d => {
+      if (d?.brand?.name) return d.brand.name;
+      if (typeof d?.brand === 'string' && d.brand) return d.brand;
+      return null;
+    });
     if (fromLD) return fromLD;
+
+    // Site-specific brand containers
+    const brandSel = [
+      '[data-testid="brand-name"]',
+      '[class*="product-brand"]',
+      '[class*="brandName"]',
+      '[itemprop="brand"]',
+    ].join(',');
+    const el = document.querySelector(brandSel);
+    if (el?.innerText) return el.innerText.trim();
 
     return '';
   }
@@ -99,54 +176,74 @@
     if (fromLD) return String(fromLD);
 
     const bodyText = document.body.innerText;
-    const match = bodyText.match(/(?:SKU|Cód\.?|Código|Referência|Ref\.?)[:\s#]*([A-Z0-9\-]{4,20})/i);
-    return match ? match[1].trim() : '';
+    const m = bodyText.match(/(?:SKU|Cód\.?|Código|Referência|Ref\.?|Art\.?)[:\s#]*([A-Z0-9\-]{4,20})/i);
+    return m ? m[1].trim() : '';
   }
 
   // ── Price ─────────────────────────────────────────────────────────────────
   function getPrice() {
-    // 1. JSON-LD offers — most reliable
+    // 1. JSON-LD — pick lowest offer price
     const ldPrice = fromJsonLD(d => {
-      const offer = d?.offers || d?.Offers;
-      if (!offer) return null;
-      const arr = Array.isArray(offer) ? offer : [offer];
-      for (const o of arr) {
-        const p = o.price || o.lowPrice;
-        if (p !== undefined && p !== null) return parseFloat(String(p).replace(',', '.'));
-      }
-      return null;
+      const offers = d?.offers || d?.Offers;
+      if (!offers) return null;
+      const arr = Array.isArray(offers) ? offers : [offers];
+      const ps = arr
+        .map(o => parseFloat(String(o?.price ?? o?.lowPrice ?? 0).replace(',', '.')))
+        .filter(p => p > 0);
+      return ps.length ? Math.min(...ps) : null;
     });
     if (ldPrice && ldPrice > 0) return ldPrice;
 
-    // 2. Meta product price
+    // 2. Meta tag
     const metaP = document.querySelector('meta[property="product:price:amount"]')?.content;
-    if (metaP) {
-      const v = parseFloat(metaP.replace(',', '.'));
-      if (v > 0) return v;
+    if (metaP) { const v = parseFloat(metaP.replace(',', '.')); if (v > 0) return v; }
+
+    // 3. VTEX __STATE__
+    const vtex = getVtexPrice();
+    if (vtex && vtex > 0) return vtex;
+
+    // 4. Site-specific selectors (most-specific first)
+    const SITE_PRICE_SEL = {
+      'telhanorte':    '.priceSpot, [class*="priceSpot"], [class*="price-spot"], .valoper__price',
+      'obrafacil':     '.price-spot, .price__selling, [class*="sellingPrice"]',
+      'abcconstrucao': '.price-spot, .product-price, [class*="price"]',
+      'leroymerlin':   '[data-testid="price"], [class*="sellingPrice"], [class*="price__selling"]',
+      'andra':         '.price, [class*="product-price"], [class*="sellingPrice"]',
+      'inspirehome':   '.price, [class*="product-price"]',
+      'yamamura':      '.price, [class*="product-price"], [class*="sellingPrice"]',
+      'belametais':    '.price, [class*="product-price"]',
+      'tokstok':       '[class*="spotPrice"], [class*="priceContainer"] .price',
+      'westwing':      '[class*="ProductPrice"], [class*="price__selling"]',
+      'boobam':        '.price, [class*="product-price"], [class*="sellingPrice"]',
+      'camicado':      '[class*="spotPrice"], [class*="sellingPrice"]',
+      'muma':          '.price, [class*="product-price"]',
+      'dexco':         '.price, [class*="product-price"]',
+      'deca.':         '.price, [class*="product-price"]',
+      'electrolux':    '[class*="product-price"], [class*="price-info"], .price',
+      'fastshop':      '[class*="bestPrice"], [class*="price-best"], .price',
+      'brastemp':      '[class*="product-price"], [class*="price-info"], .price',
+      'samsung':       '[class*="price-info"], [class*="pd-price"], [class*="price"]',
+    };
+
+    for (const [key, sel] of Object.entries(SITE_PRICE_SEL)) {
+      if (host.includes(key)) {
+        const el = document.querySelector(sel);
+        if (el) { const v = parsePrice(el.textContent); if (v > 0) return v; }
+        break;
+      }
     }
 
-    // 3. Walk text nodes for "R$ X"
+    // 5. Walk text nodes — pick most frequent R$ value
     const prices = [];
     const walk = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
     let node;
     while ((node = walk.nextNode())) {
-      const text = node.textContent;
-      const match = text.match(/R\$\s*([\d.,]+)/);
-      if (match) {
-        // Normalize: "1.234,56" → 1234.56  |  "1234.56" → 1234.56
-        const raw = match[1];
-        let val;
-        if (/\d{1,3}(\.\d{3})+(,\d{2})?$/.test(raw)) {
-          // Brazilian format: 1.234,56
-          val = parseFloat(raw.replace(/\./g, '').replace(',', '.'));
-        } else {
-          val = parseFloat(raw.replace(',', '.'));
-        }
-        if (val > 0 && val < 500000) prices.push(val);
+      const m = node.textContent.match(/R\$\s*([\d.,]+)/);
+      if (m) {
+        const v = parsePrice(m[1]);
+        if (v > 0 && v < 500000) prices.push(v);
       }
     }
-
-    // Prefer the most-seen price value (likely the actual product price)
     if (prices.length > 0) {
       const freq = {};
       prices.forEach(v => freq[v] = (freq[v] || 0) + 1);
@@ -157,60 +254,54 @@
   }
 
   // ── Image ─────────────────────────────────────────────────────────────────
-  // Fix #3: og:image is the most reliable canonical product image.
-  // We also filter by aspect ratio and size to avoid grabbing icons/sprites.
   function getBestImage() {
-    // 1. og:image — canonical, usually high quality
+    // 1. og:image — canonical product image
     const og = document.querySelector('meta[property="og:image"]')?.content;
-    if (og) return og;
+    if (og && !/logo|icon/.test(og.toLowerCase())) return og;
 
     // 2. JSON-LD image
     const ldImg = fromJsonLD(d => {
-      if (typeof d?.image === 'string') return d.image;
+      if (typeof d?.image === 'string' && d.image) return d.image;
       if (d?.image?.url) return d.image.url;
-      if (Array.isArray(d?.image)) return d.image[0];
+      if (Array.isArray(d?.image) && d.image.length)
+        return typeof d.image[0] === 'string' ? d.image[0] : (d.image[0]?.url || null);
       return null;
     });
     if (ldImg) return ldImg;
 
-    // 3. Largest img element with good aspect ratio
+    // 3. Largest loaded image with sensible dimensions and aspect ratio
     const candidates = [...document.images]
-      .filter(img => {
-        const w = img.naturalWidth, h = img.naturalHeight;
-        if (w < 150 || h < 150) return false;
-        // Filter obvious non-product images by URL patterns
-        const src = (img.src + img.dataset.src || '').toLowerCase();
-        if (/logo|icon|sprite|banner|badge|avatar|header|footer|svg/.test(src)) return false;
-        // Reasonable aspect ratio (not extremely wide banners or very tall)
-        const ratio = w / h;
+      .map(img => ({
+        src: img.src || img.dataset.src || img.dataset.lazySrc || img.dataset.original || '',
+        area: img.naturalWidth * img.naturalHeight,
+        ratio: img.naturalWidth / (img.naturalHeight || 1),
+      }))
+      .filter(({ src, area, ratio }) => {
+        if (!src || area < 150 * 150) return false;
+        if (/logo|icon|sprite|banner|badge|avatar|header|footer/.test(src.toLowerCase())) return false;
         return ratio >= 0.4 && ratio <= 2.5;
       })
-      .sort((a, b) => (b.naturalWidth * b.naturalHeight) - (a.naturalWidth * a.naturalHeight));
+      .sort((a, b) => b.area - a.area);
 
     return candidates[0]?.src || '';
   }
 
-  // ── JSON-LD helper ────────────────────────────────────────────────────────
-  function fromJsonLD(extractor) {
-    const scripts = document.querySelectorAll('script[type="application/ld+json"]');
-    for (const script of scripts) {
-      try {
-        const parsed = JSON.parse(script.textContent);
-        const items = Array.isArray(parsed) ? parsed : [parsed];
-        for (const item of items) {
-          const result = extractor(item);
-          if (result !== null && result !== undefined) return result;
-          // Also check @graph
-          if (item['@graph']) {
-            for (const node of item['@graph']) {
-              const r = extractor(node);
-              if (r !== null && r !== undefined) return r;
-            }
-          }
-        }
-      } catch {}
-    }
-    return null;
+  // ─── Category auto-guess ──────────────────────────────────────────────────
+  function guessCategory(name) {
+    const n = (name || '').toLowerCase();
+    if (/piso|cerâmic|porcelan|revestimento|argamassa|rejunte|tijolet|pedra|mármo|granito|parquet|laminado|deck|azulejo|grês/.test(n))
+      return 'revestimentos';
+    if (/vaso sanitário|bacia sanitária|cuba|torneira|ducha|chuveiro|sifão|mictório|válvula|box|banheira|fechadura|cadeado|registro|misturador|metalic/.test(n))
+      return 'loucas-metais';
+    if (/luminária|lâmpada|lustre|arandela|spot|trilho|pendente|led|plafon/.test(n))
+      return 'iluminacao';
+    if (/geladeira|refrigerador|fogão|forno|microondas|máquina de lavar|máquina de secar|lava.louça|lavadora|secadora|air fryer|aspirador|purificador|climatizador|ar condicionado|ventilador|exaustor|coifa|cooktop/.test(n))
+      return 'eletros';
+    if (/sofá|poltrona|mesa|cadeira|cama|colchão|armário|guarda.roupa|estante|rack|prateleira|criado.mudo|aparador|buffet|escrivaninha|banco|pufe|cabeceira|penteadeira/.test(n))
+      return 'moveis';
+    if (/tapete|quadro|almofada|cortina|persiana|espelho|toalha|lençol|fronha|edredom|travesseiro|enxoval|roupa de cama|vaso decorat|planta|interruptor|tomada|decoração|objeto decorat/.test(n))
+      return 'decoracao-enxoval';
+    return 'outros';
   }
 
   // ─── Toast notification ──────────────────────────────────────────────────

@@ -74,11 +74,13 @@
 
     .prod-cat-wrap { margin-top: 4px; display: flex; align-items: center; gap: 5px; }
     .cat-badge { display: inline-block; padding: 1px 7px; border-radius: 20px; font-size: 9.5px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: #fff; cursor: pointer; border: none; font-family: inherit; line-height: 1.6; }
-    .cat-badge.revestimentos { background: #9F4F39; }
-    .cat-badge.loucas-metais  { background: #5E6979; }
-    .cat-badge.iluminacao     { background: #AA9C79; }
-    .cat-badge.enxoval        { background: #B36C51; }
-    .cat-badge.outros         { background: #9AA09A; }
+    .cat-badge.revestimentos      { background: #9F4F39; }
+    .cat-badge.loucas-metais      { background: #5E6979; }
+    .cat-badge.iluminacao         { background: #AA9C79; }
+    .cat-badge.eletros            { background: #607080; }
+    .cat-badge.moveis             { background: #8D6E63; }
+    .cat-badge.decoracao-enxoval  { background: #8E9A6A; }
+    .cat-badge.outros             { background: #9AA09A; }
 
     .cat-inline-select { display: none; font-size: 10.5px; border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; background: var(--bg); color: var(--text); font-family: inherit; outline: none; }
     .cat-inline-select.visible { display: inline-block; }
@@ -158,8 +160,10 @@
     <button class="cat-tab active" data-cat="all">Todos</button>
     <button class="cat-tab" data-cat="revestimentos">Revestimentos</button>
     <button class="cat-tab" data-cat="loucas-metais">Louças &amp; Metais</button>
-    <button class="cat-tab" data-cat="iluminacao">Iluminação &amp; Dec.</button>
-    <button class="cat-tab" data-cat="enxoval">Enxoval</button>
+    <button class="cat-tab" data-cat="iluminacao">Iluminação</button>
+    <button class="cat-tab" data-cat="eletros">Eletros</button>
+    <button class="cat-tab" data-cat="moveis">Móveis</button>
+    <button class="cat-tab" data-cat="decoracao-enxoval">Dec. &amp; Enxoval</button>
     <button class="cat-tab" data-cat="outros">Outros</button>
   </div>
 
@@ -189,8 +193,10 @@
       <select class="form-select" id="f-cat">
         <option value="revestimentos">Revestimentos</option>
         <option value="loucas-metais">Louças e Metais</option>
-        <option value="iluminacao">Iluminação &amp; Dec.</option>
-        <option value="enxoval">Enxoval</option>
+        <option value="iluminacao">Iluminação</option>
+        <option value="eletros">Eletros</option>
+        <option value="moveis">Móveis</option>
+        <option value="decoracao-enxoval">Decoração e Enxoval</option>
         <option value="outros" selected>Outros</option>
       </select>
     </div>
