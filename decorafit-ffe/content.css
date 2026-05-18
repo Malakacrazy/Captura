@@ -1,77 +1,219 @@
 /* content.css v2 — Decorafit floating capture button */
 
+/*
+ * OVERVIEW
+ * --------
+ * This stylesheet is injected into every host page by the content script.
+ * It styles two injected elements:
+ *   #sa-fab   — the persistent Floating Action Button in the page corner.
+ *   #sa-toast — a temporary notification badge that appears above the FAB.
+ *
+ * Because we are injecting into arbitrary third-party pages, every rule uses
+ * a unique ID selector (#sa-fab, #sa-toast) to minimise collision with the
+ * host page's own styles. We also hard-code values (z-index, font-family,
+ * etc.) rather than inheriting, so the UI looks consistent everywhere.
+ */
+
+
+/* ==========================================================================
+   FLOATING ACTION BUTTON — #sa-fab
+   ========================================================================== */
+
 #sa-fab {
+  /* --- Positioning --------------------------------------------------------
+   * position:fixed removes the element from the normal document flow and
+   * anchors it to the viewport, not the page. This means the button stays
+   * pinned to the bottom-right corner even when the user scrolls a long
+   * product page — it never drifts or disappears. */
   position: fixed;
-  bottom: 24px;
-  right: 24px;
+  bottom: 24px; /* 24 px gap from the bottom edge of the viewport */
+  right: 24px;  /* 24 px gap from the right edge of the viewport */
+
+  /* --- Stacking order -----------------------------------------------------
+   * 2147483647 is 2^31 − 1, the maximum value of a 32-bit signed integer,
+   * which is the highest z-index browsers reliably honour. Using the absolute
+   * ceiling guarantees our button renders on top of every element on the host
+   * page — including modals, sticky headers, chat widgets, and cookie banners
+   * that may themselves use high z-index values. */
   z-index: 2147483647;
+
+  /* --- Layout -------------------------------------------------------------
+   * flex + align-items:center keeps the icon SVG and the button label text
+   * vertically centred relative to each other as a single inline row. */
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 11px 16px;
+  gap: 8px; /* space between the icon and the label text */
+
+  padding: 11px 16px; /* vertical / horizontal inner spacing */
+
+  /* --- Appearance ---------------------------------------------------------
+   * Brand orange fill with white text for maximum contrast. */
   background: #FF6633;
   color: #fff;
-  border: none;
+  border: none; /* reset browser default button border */
+
+  /* border-radius:50px produces a "pill" / stadium shape. Any value larger
+   * than half the element's height collapses the ends into perfect semicircles;
+   * 50px is safely above that threshold for our ~36 px tall button without
+   * needing to know the exact height at authoring time. */
   border-radius: 50px;
+
+  /* --- Typography ---------------------------------------------------------
+   * system-ui resolves to the platform's native UI font (San Francisco on
+   * macOS/iOS, Segoe UI on Windows, Roboto on Android/Chrome OS). -apple-
+   * system is the legacy Safari alias for the same font. The sans-serif
+   * fallback handles any edge case where neither resolves. Using the system
+   * font ensures the button feels native and avoids loading a web font. */
   font-family: system-ui, -apple-system, sans-serif;
   font-size: 13px;
-  font-weight: 500;
-  letter-spacing: 0.04em;
-  cursor: pointer;
+  font-weight: 500;        /* medium weight — readable without being heavy */
+  letter-spacing: 0.04em;  /* slight tracking improves legibility at small sizes */
+
+  cursor: pointer; /* confirm to the user this element is interactive */
+
+  /* Layered box-shadow: the first layer is a wide, coloured glow that echoes
+   * the brand orange and lifts the button visually off the page; the second
+   * is a tight neutral shadow that adds crisp edge definition. */
   box-shadow: 0 4px 20px rgba(255,102,51,0.45), 0 1px 4px rgba(0,0,0,0.15);
+
+  /* --- Hover transition ----------------------------------------------------
+   * cubic-bezier(0.34, 1.56, 0.64, 1) is a "spring" easing curve. The P2
+   * y-value of 1.56 — greater than 1 — causes the animation to overshoot its
+   * target briefly before settling, producing the characteristic springy pop
+   * that makes the hover feel tactile and alive rather than mechanical. The
+   * 0.2 s duration keeps the response snappy. 'all' is intentional: it covers
+   * background, transform, and box-shadow in one declaration. */
   transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* Prevent the button label text from being accidentally selected when the
+   * user rapidly double-clicks or triple-clicks the button. */
   user-select: none;
 }
 
+
+/* --- Hover state -----------------------------------------------------------
+ * Darkens the background to signal interactivity, lifts the button 2 px
+ * upward (translateY(-2px)) and scales it 2 % larger — together these create
+ * the illusion the button is rising towards the cursor. The amplified shadow
+ * reinforces the elevation change. All values animate from the base state via
+ * the spring transition defined above. */
 #sa-fab:hover {
-  background: #CC4E1A;
+  background: #CC4E1A; /* darkened brand orange (~20 % darker) */
   transform: translateY(-2px) scale(1.02);
-  box-shadow: 0 6px 28px rgba(255,102,51,0.55);
+  box-shadow: 0 6px 28px rgba(255,102,51,0.55); /* wider, more opaque glow */
 }
 
+
+/* --- Active / pressed state ------------------------------------------------
+ * When the user actually clicks, the button snaps back to its original
+ * Y-position and shrinks very slightly (scale 0.97), simulating the physical
+ * sensation of pressing a button down. The spring transition makes the snap
+ * feel quick and satisfying. */
 #sa-fab:active {
   transform: translateY(0) scale(0.97);
 }
 
+
+/* --- Loading state ---------------------------------------------------------
+ * Applied by the content script while an async capture operation is in
+ * flight (image upload, storage write, etc.). */
 #sa-fab.loading {
-  background: #7A6A60;
+  background: #7A6A60; /* muted warm grey — visually indicates "busy / disabled" */
+
+  /* pointer-events:none removes the element from hit-testing entirely. The
+   * cursor will not change to a pointer over it and click events will not
+   * fire. This prevents a second capture being triggered before the first one
+   * completes — a lightweight guard against double-submission without needing
+   * JS debounce logic. */
   pointer-events: none;
 }
 
+
+/* ==========================================================================
+   TOAST NOTIFICATION — #sa-toast
+   ========================================================================== */
+
 #sa-toast {
+  /* Anchored to the viewport like the FAB, positioned directly above it.
+   * 82 px = FAB bottom offset (24 px) + approximate FAB height (36 px) +
+   * breathing room (22 px). This keeps the toast visually grouped with the
+   * button it describes. */
   position: fixed;
   bottom: 82px;
-  right: 24px;
+  right: 24px; /* right-aligned with the FAB */
+
+  /* Same max z-index as the FAB so the toast is never obscured by host-page
+   * elements that appear above the FAB's stacking context. */
   z-index: 2147483647;
+
   padding: 9px 14px;
-  border-radius: 7px;
+  border-radius: 7px; /* softer rounded rectangle, distinct from the FAB pill */
+
+  /* Match the FAB's font stack for visual consistency. */
   font-family: system-ui, -apple-system, sans-serif;
   font-size: 12.5px;
-  line-height: 1.4;
-  max-width: 300px;
-  word-break: break-word;
+  line-height: 1.4; /* comfortable reading height for multi-line messages */
+
+  max-width: 300px;     /* prevent very long messages from spanning the screen */
+  word-break: break-word; /* allow long URLs / product codes to wrap rather than overflow */
+
+  /* The toast must never capture pointer events. It floats above the page
+   * and could otherwise block clicks to links or interactive elements
+   * directly beneath it while it is visible. */
   pointer-events: none;
+
+  /* --- CSS transition reveal -----------------------------------------------
+   * The toast starts fully invisible (opacity:0) and nudged 6 px downward
+   * (translateY(6px)). This is the "off" keyframe for our reveal animation.
+   * When JS adds the .sa-toast-ok or .sa-toast-warn class, CSS transitions
+   * the element to opacity:1 and translateY(0) — giving a short upward slide-
+   * in. No JS animation frame loop is needed; the GPU handles the interpolation
+   * via the transition property below. Removing the class reverses the
+   * animation automatically, fading the toast back out. */
   opacity: 0;
   transform: translateY(6px);
+
+  /* Animate both opacity and position together at the same 0.25 s duration.
+   * Using 'ease' (slow-in, slow-out) feels natural for a notification that
+   * gently appears and recedes rather than snapping in. */
   transition: opacity 0.25s ease, transform 0.25s ease;
 }
 
+
+/* --- Visible state (shared by both variants) --------------------------------
+ * Applying either variant class triggers the CSS transition from the hidden
+ * state above to fully visible at its natural position. Both variants share
+ * the same "revealed" geometry, so the values are factored into one rule. */
 #sa-toast.sa-toast-ok,
 #sa-toast.sa-toast-warn {
   opacity: 1;
-  transform: translateY(0);
+  transform: translateY(0); /* slide into final resting position */
 }
 
+
+/* --- Success variant (.sa-toast-ok) ----------------------------------------
+ * Used when a product has been captured successfully.
+ * Color language: pale green background (#F0FAF5) with dark green text
+ * (#14532D) reads as "all good / confirmed". The brand-orange left border
+ * ties the toast back to the FAB visually, reinforcing that the notification
+ * originated from this extension's action rather than the host page. */
 #sa-toast.sa-toast-ok {
   background: #F0FAF5;
   color: #14532D;
-  border-left: 3px solid #FF6633;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.12);
+  border-left: 3px solid #FF6633; /* brand accent stripe */
+  box-shadow: 0 2px 12px rgba(0,0,0,0.12); /* subtle lift off the page */
 }
 
+
+/* --- Warning variant (.sa-toast-warn) --------------------------------------
+ * Used when capture fails or the user needs to take an action (e.g. missing
+ * fields, storage error). Color language: warm amber/orange background
+ * (#FFF7ED) with deep rust text (#9A3412) reads as "attention needed" —
+ * serious but not alarming. The orange-600 left border (#F97316) reinforces
+ * the cautionary tone without using red, which would feel like a crash. */
 #sa-toast.sa-toast-warn {
   background: #FFF7ED;
   color: #9A3412;
-  border-left: 3px solid #F97316;
+  border-left: 3px solid #F97316; /* amber accent stripe */
   box-shadow: 0 2px 12px rgba(0,0,0,0.12);
 }
