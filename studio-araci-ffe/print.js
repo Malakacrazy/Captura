@@ -252,7 +252,8 @@ document.getElementById('xlsxBtn').addEventListener('click', async () => {
       try {
         const resp = await fetch(p.img);
         if (!resp.ok) return null;
-        const ct = (resp.headers.get('content-type') || 'image/jpeg').split(';')[0].trim();
+        const ct = (resp.headers.get('content-type') || '').split(';')[0].trim();
+        if (!ct.startsWith('image/')) return null;
         return { data: new Uint8Array(await resp.arrayBuffer()), ext: ct.includes('png') ? 'png' : 'jpeg' };
       } catch { return null; }
     }));
@@ -451,20 +452,23 @@ function buildXLSX(products, projectName, fetchedImages) {
     const NS_XDR = `xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing"`;
     const NS_A   = `xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"`;
     const NS_R   = `xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"`;
-    drawingXml = `<?xml version="1.0" encoding="UTF-8"?><xdr:wsDr ${NS_XDR} ${NS_A} ${NS_R}>`;
+    drawingXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><xdr:wsDr ${NS_XDR} ${NS_A} ${NS_R}>`;
     for (const a of productAnchors) {
       if (!a.img) continue;
-      // 457200 EMU = 0.5 inch image; 76200 = 6pt padding
+      // twoCellAnchor: col A, rowIdx → col B, rowIdx+1 (fills the cell); 76200 EMU = ~6pt padding
       drawingXml +=
-        `<xdr:oneCellAnchor>` +
+        `<xdr:twoCellAnchor editAs="oneCell">` +
         `<xdr:from><xdr:col>0</xdr:col><xdr:colOff>76200</xdr:colOff><xdr:row>${a.rowIdx}</xdr:row><xdr:rowOff>76200</xdr:rowOff></xdr:from>` +
-        `<xdr:ext cx="457200" cy="457200"/>` +
+        `<xdr:to><xdr:col>1</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${a.rowIdx + 1}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to>` +
         `<xdr:pic>` +
-        `<xdr:nvPicPr><xdr:cNvPr id="${a.picId}" name="Img${a.picId}"/><xdr:cNvPicPr/></xdr:nvPicPr>` +
-        `<xdr:blipFill><a:blip r:embed="${a.rId}"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill>` +
+        `<xdr:nvPicPr>` +
+        `<xdr:cNvPr id="${a.picId + 1}" name="Img${a.picId}"/>` +
+        `<xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr>` +
+        `</xdr:nvPicPr>` +
+        `<xdr:blipFill><a:blip r:embed="${a.rId}" cstate="print"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill>` +
         `<xdr:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="457200" cy="457200"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr>` +
         `</xdr:pic><xdr:clientData/>` +
-        `</xdr:oneCellAnchor>`;
+        `</xdr:twoCellAnchor>`;
     }
     drawingXml += `</xdr:wsDr>`;
   }
