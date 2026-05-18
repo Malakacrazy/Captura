@@ -451,20 +451,22 @@ function buildXLSX(products, projectName, fetchedImages) {
 
   // ── Drawing XML ──────────────────────────────────────────────────────────────
   let drawingXml = '';
+  let drawingRelsXml = '';
+  let sheetRelsXml  = '';
   if (hasDrawing) {
     const NS_XDR = `xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing"`;
     const NS_A   = `xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"`;
-    // xmlns:r is declared on a:blip (not the root) — this is what xlsxwriter does and Excel requires
+    // xmlns:r on a:blip directly — openpyxl/xlsxwriter proven pattern
     const BLIP_R = `xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"`;
     const SZ = 457200; // 0.5 inch in EMU
     drawingXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><xdr:wsDr ${NS_XDR} ${NS_A}>`;
     for (const a of productAnchors) {
       if (!a.img) continue;
-      const id = a.picId; // cNvPr id: 1-based
+      const id = a.picId + 1; // id starts at 2 (1 is reserved for sheet)
       drawingXml +=
-        `<xdr:oneCellAnchor>` +
+        `<xdr:twoCellAnchor editAs="oneCell">` +
         `<xdr:from><xdr:col>0</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${a.rowIdx}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from>` +
-        `<xdr:ext cx="${SZ}" cy="${SZ}"/>` +
+        `<xdr:to><xdr:col>1</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${a.rowIdx + 1}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to>` +
         `<xdr:pic>` +
         `<xdr:nvPicPr>` +
         `<xdr:cNvPr id="${id}" name="Picture ${a.picId}"/>` +
@@ -473,7 +475,7 @@ function buildXLSX(products, projectName, fetchedImages) {
         `<xdr:blipFill><a:blip ${BLIP_R} r:embed="${a.rId}"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill>` +
         `<xdr:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${SZ}" cy="${SZ}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr>` +
         `</xdr:pic><xdr:clientData/>` +
-        `</xdr:oneCellAnchor>`;
+        `</xdr:twoCellAnchor>`;
     }
     drawingXml += `</xdr:wsDr>`;
   }
@@ -533,17 +535,25 @@ function buildXLSX(products, projectName, fetchedImages) {
       `</cellXfs></styleSheet>`],
     ['xl/worksheets/sheet1.xml', sheetXml],
     ...mediaFiles,
-    ...(hasDrawing ? [
-      ['xl/drawings/drawing1.xml', drawingXml],
-      ['xl/drawings/_rels/drawing1.xml.rels',
+    ...(hasDrawing ? (() => {
+      drawingRelsXml =
         `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="${PKG}">` +
         drawingRelEntries.join('') +
-        `</Relationships>`],
-      ['xl/worksheets/_rels/sheet1.xml.rels',
+        `</Relationships>`;
+      sheetRelsXml =
         `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="${PKG}">` +
         `<Relationship Id="rId1" Type="${DOC}/drawing" Target="../drawings/drawing1.xml"/>` +
-        `</Relationships>`],
-    ] : []),
+        `</Relationships>`;
+      console.log('[xlsx-debug] images embedded:', imgCounter);
+      console.log('[xlsx-debug] drawing1.xml:\n', drawingXml);
+      console.log('[xlsx-debug] drawing1.xml.rels:\n', drawingRelsXml);
+      console.log('[xlsx-debug] sheet1.xml.rels:\n', sheetRelsXml);
+      return [
+        ['xl/drawings/drawing1.xml', drawingXml],
+        ['xl/drawings/_rels/drawing1.xml.rels', drawingRelsXml],
+        ['xl/worksheets/_rels/sheet1.xml.rels', sheetRelsXml],
+      ];
+    })() : []),
   ];
 
   return zip(files);
