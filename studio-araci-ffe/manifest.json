@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Studio Araci · Orçamento FF&E",
+  "name": "Decorafit · Orçamento FF&E",
   "version": "1.0.0",
-  "description": "Capture produtos de lojas online e gere orçamentos com a identidade visual do Studio Araci.",
+  "description": "Capture produtos de lojas online e gere orçamentos com a identidade visual da Decorafit.",
   "permissions": [
     "storage",
     "unlimitedStorage",
@@ -15,7 +15,7 @@
   ],
   "action": {
     "default_popup": "popup.html",
-    "default_title": "Studio Araci · Orçamento FF&E",
+    "default_title": "Decorafit · Orçamento FF&E",
     "default_icon": {
       "16":  "icons/icon16.png",
       "48":  "icons/icon48.png",

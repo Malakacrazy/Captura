@@ -1,10 +1,10 @@
-# Studio Araci · Orçamento FF&E
+# Decorafit · Orçamento FF&E
 
 Chrome extension for interior designers to capture products from Brazilian e-commerce stores and generate professional PDF quotations.
 
 ## What it does
 
-The extension injects a floating **"⊕ Orçamento"** button on every webpage. On supported product pages it automatically extracts the product name, brand, SKU, price, and image. Captured items are organized by category in a popup interface, and can be exported as a formatted A4 PDF quotation under the Studio Araci visual identity. Projects can be saved to an in-browser library and reloaded at any time.
+The extension injects a floating **"⊕ Orçamento"** button on every webpage. On supported product pages it automatically extracts the product name, brand, SKU, price, and image. Captured items are organized by category in a popup interface, and can be exported as a formatted A4 PDF quotation under the Decorafit visual identity. Projects can be saved to an in-browser library and reloaded at any time.
 
 ## Features
 
@@ -13,7 +13,7 @@ The extension injects a floating **"⊕ Orçamento"** button on every webpage. O
 - Smart category auto-detection based on product name
 - Popup interface with per-item quantity controls and manual entry form
 - Budget total calculated in real time, grouped by category
-- Professional PDF generation (A4, multi-page, Studio Araci branding)
+- Professional PDF generation (A4, multi-page, Decorafit branding)
 - Project library: save, reload, rename, and delete past quotations
 
 ## Supported stores
@@ -48,7 +48,7 @@ The extraction pipeline also works on any site via JSON-LD, Open Graph meta tags
 2. Open Chrome and go to `chrome://extensions/`.
 3. Enable **Developer mode** (toggle in the top-right corner).
 4. Click **Load unpacked**.
-5. Select the `studio-araci-ffe/` directory inside this repo.
+5. Select the `decorafit-ffe/` directory inside this repo.
 6. The extension icon appears in the Chrome toolbar.
 
 ## Usage
@@ -77,7 +77,7 @@ The extraction pipeline also works on any site via JSON-LD, Open Graph meta tags
 ## Project structure
 
 ```
-studio-araci-ffe/
+decorafit-ffe/
 ├── manifest.json   # Extension manifest (Manifest V3)
 ├── background.js   # Service worker — handles extension lifecycle events
 ├── content.js      # Injected on every page — floating button and product extraction
@@ -100,7 +100,7 @@ studio-araci-ffe/
 
 ## Contributing
 
-1. Clone the repo and load `studio-araci-ffe/` as an unpacked extension (see Installation).
+1. Clone the repo and load `decorafit-ffe/` as an unpacked extension (see Installation).
 2. Edit source files directly — there is no build step.
 3. After changes, go to `chrome://extensions/` and click the **reload** icon next to the extension.
 4. Open a pull request with a clear description of the change.

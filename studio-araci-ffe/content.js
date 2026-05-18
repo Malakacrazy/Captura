@@ -1,4 +1,4 @@
-// content.js v3 — Studio Araci FF&E · Floating capture button
+// content.js v3 — Decorafit FF&E · Floating capture button
 
 (function () {
   'use strict';
@@ -9,7 +9,7 @@
 
   const fab = document.createElement('button');
   fab.id = 'sa-fab';
-  fab.setAttribute('aria-label', 'Adicionar ao Orçamento Studio Araci');
+  fab.setAttribute('aria-label', 'Adicionar ao Orçamento Decorafit');
   fab.innerHTML = `
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
       <path d="M12 5v14M5 12h14"/>

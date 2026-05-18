@@ -1,4 +1,4 @@
-// background.js v2 — Studio Araci FF&E
+// background.js v2 — Decorafit FF&E
 
 chrome.runtime.onInstalled.addListener(() => {
   chrome.storage.local.get(['products', 'projectName', 'projects'], (data) => {

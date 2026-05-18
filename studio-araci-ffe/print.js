@@ -1,4 +1,4 @@
-// print.js v2 — Studio Araci FF&E
+// print.js v2 — Decorafit FF&E
 
 // ─── Fix #1: Event listeners instead of inline onclick ─────────────────────
 // (Manifest V3 CSP blocks inline handlers — this is why "Salvar PDF" didn't work)

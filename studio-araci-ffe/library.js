@@ -1,4 +1,4 @@
-// library.js — Studio Araci FF&E · Biblioteca de Projetos
+// library.js — Decorafit FF&E · Biblioteca de Projetos
 
 const $ = id => document.getElementById(id);
 

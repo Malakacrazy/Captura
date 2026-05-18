@@ -1,4 +1,4 @@
-// popup.js v2 — Studio Araci FF&E
+// popup.js v2 — Decorafit FF&E
 
 const $ = id => document.getElementById(id);
 
