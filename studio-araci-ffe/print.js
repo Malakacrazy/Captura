@@ -454,23 +454,23 @@ function buildXLSX(products, projectName, fetchedImages) {
   if (hasDrawing) {
     const NS_XDR = `xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing"`;
     const NS_A   = `xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"`;
-    const NS_R   = `xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"`;
-    // oneCellAnchor pattern from xlsxwriter (proven compatible with Excel)
+    // xmlns:r is declared on a:blip (not the root) — this is what xlsxwriter does and Excel requires
+    const BLIP_R = `xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"`;
     const SZ = 457200; // 0.5 inch in EMU
-    drawingXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><xdr:wsDr ${NS_XDR} ${NS_A} ${NS_R}>`;
+    drawingXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><xdr:wsDr ${NS_XDR} ${NS_A}>`;
     for (const a of productAnchors) {
       if (!a.img) continue;
-      const id = a.picId + 1; // cNvPr id must start at 2
+      const id = a.picId; // cNvPr id: 1-based
       drawingXml +=
         `<xdr:oneCellAnchor>` +
         `<xdr:from><xdr:col>0</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${a.rowIdx}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from>` +
         `<xdr:ext cx="${SZ}" cy="${SZ}"/>` +
         `<xdr:pic>` +
         `<xdr:nvPicPr>` +
-        `<xdr:cNvPr id="${id}" name="Picture ${a.picId}" descr="image${a.picId}"/>` +
+        `<xdr:cNvPr id="${id}" name="Picture ${a.picId}"/>` +
         `<xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr>` +
         `</xdr:nvPicPr>` +
-        `<xdr:blipFill><a:blip r:embed="${a.rId}"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill>` +
+        `<xdr:blipFill><a:blip ${BLIP_R} r:embed="${a.rId}"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill>` +
         `<xdr:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${SZ}" cy="${SZ}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr>` +
         `</xdr:pic><xdr:clientData/>` +
         `</xdr:oneCellAnchor>`;
