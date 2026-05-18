@@ -236,3 +236,158 @@ function buildProductRow(p, idx) {
 }
 
 render();
+
+// ─── Export XLSX ─────────────────────────────────────────────────────────────
+
+document.getElementById('xlsxBtn').addEventListener('click', async () => {
+  const btn = document.getElementById('xlsxBtn');
+  btn.textContent = '⏳ Gerando...';
+  btn.disabled = true;
+  try {
+    const data = await chrome.storage.local.get(['products', 'projectName']);
+    const blob = buildXLSX(data.products || [], data.projectName || 'Orçamento');
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = (data.projectName || 'Orçamento').replace(/[/\\?%*:|"<>]/g, '-') + '.xlsx';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } finally {
+    btn.textContent = '📊 Exportar .xlsx';
+    btn.disabled = false;
+  }
+});
+
+function buildXLSX(products, projectName) {
+  // ── Helpers ────────────────────────────────────────────────────────────────
+  const enc = s => new TextEncoder().encode(s);
+  const concat = arrs => {
+    const out = new Uint8Array(arrs.reduce((s, a) => s + a.length, 0));
+    let pos = 0; arrs.forEach(a => { out.set(a, pos); pos += a.length; });
+    return out;
+  };
+  const u16 = n => new Uint8Array([n & 0xFF, (n >> 8) & 0xFF]);
+  const u32 = n => { n = n >>> 0; return new Uint8Array([n & 0xFF, (n >>> 8) & 0xFF, (n >>> 16) & 0xFF, (n >>> 24) & 0xFF]); };
+  const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+  // ── CRC-32 ─────────────────────────────────────────────────────────────────
+  const crcTab = (() => {
+    const t = new Uint32Array(256);
+    for (let i = 0; i < 256; i++) {
+      let c = i;
+      for (let j = 8; j--;) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1;
+      t[i] = c;
+    }
+    return t;
+  })();
+  const crc32 = buf => {
+    let c = 0xFFFFFFFF;
+    for (const b of buf) c = crcTab[(c ^ b) & 0xFF] ^ (c >>> 8);
+    return (c ^ 0xFFFFFFFF) >>> 0;
+  };
+
+  // ── Minimal ZIP ────────────────────────────────────────────────────────────
+  function zip(files) {
+    const parts = [], centrals = [];
+    let offset = 0;
+    for (const [name, content] of files) {
+      const nb = enc(name);
+      const data = typeof content === 'string' ? enc(content) : content;
+      const crc = crc32(data);
+      const local = concat([
+        new Uint8Array([0x50,0x4B,0x03,0x04]),
+        u16(20), u16(0), u16(0), u16(0), u16(0),
+        u32(crc), u32(data.length), u32(data.length),
+        u16(nb.length), u16(0), nb
+      ]);
+      parts.push(local, data);
+      centrals.push(concat([
+        new Uint8Array([0x50,0x4B,0x01,0x02]),
+        u16(20), u16(20), u16(0), u16(0), u16(0), u16(0), u16(0),
+        u32(crc), u32(data.length), u32(data.length),
+        u16(nb.length), u16(0), u16(0), u16(0), u16(0),
+        u32(0), u32(offset), nb
+      ]));
+      offset += local.length + data.length;
+    }
+    const cd = concat(centrals);
+    const eocd = concat([
+      new Uint8Array([0x50,0x4B,0x05,0x06]),
+      u16(0), u16(0), u16(files.length), u16(files.length),
+      u32(cd.length), u32(offset), u16(0)
+    ]);
+    return new Blob([concat([...parts, cd, eocd])], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    });
+  }
+
+  // ── Worksheet rows ─────────────────────────────────────────────────────────
+  // cell: {v, t:'s'|'n', s:styleIndex}
+  const CATS_LABELS = {
+    'revestimentos':     'Revestimentos',
+    'loucas-metais':     'Louças e Metais',
+    'iluminacao':        'Iluminação',
+    'eletros':           'Eletros',
+    'moveis':            'Móveis',
+    'decoracao-enxoval': 'Decoração e Enxoval',
+    'outros':            'Outros'
+  };
+
+  const rows = [];
+  const s = (v, t, style) => ({v, t, s: style});
+
+  rows.push([s(projectName, 's', 2)]);
+  rows.push([]);
+  rows.push([
+    s('Categoria','s',1), s('Produto','s',1), s('Marca','s',1), s('SKU','s',1),
+    s('Qtd','s',1), s('Preço Unit. (R$)','s',1), s('Subtotal (R$)','s',1), s('URL','s',1)
+  ]);
+
+  let grandTotal = 0;
+  for (const [catId, catLabel] of Object.entries(CATS_LABELS)) {
+    const items = products.filter(p => (p.category || 'outros') === catId);
+    if (!items.length) continue;
+    let catTotal = 0;
+    for (const p of items) {
+      const sub = (p.price || 0) * (p.qty || 1);
+      catTotal += sub;
+      rows.push([
+        s(catLabel,'s',0), s(p.name||'','s',0), s(p.brand||'','s',0), s(p.sku||'','s',0),
+        s(p.qty||1,'n',0), s(p.price||0,'n',3), s(sub,'n',3), s(p.url||'','s',0)
+      ]);
+    }
+    grandTotal += catTotal;
+    rows.push([{},{},{},{},{}, s('Subtotal:','s',2), s(catTotal,'n',3)]);
+    rows.push([]);
+  }
+  rows.push([{},{},{},{},{}, s('TOTAL GERAL:','s',2), s(grandTotal,'n',3)]);
+
+  // ── Sheet XML ──────────────────────────────────────────────────────────────
+  const COLS = 'ABCDEFGH';
+  let sheetXml = `<?xml version="1.0" encoding="UTF-8"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><cols><col min="1" max="1" width="18" customWidth="1"/><col min="2" max="2" width="40" customWidth="1"/><col min="3" max="3" width="15" customWidth="1"/><col min="4" max="4" width="15" customWidth="1"/><col min="5" max="5" width="6" customWidth="1"/><col min="6" max="6" width="18" customWidth="1"/><col min="7" max="7" width="18" customWidth="1"/><col min="8" max="8" width="45" customWidth="1"/></cols><sheetData>`;
+  rows.forEach((row, ri) => {
+    if (!row.length) { sheetXml += `<row r="${ri+1}"/>`; return; }
+    sheetXml += `<row r="${ri+1}">`;
+    row.forEach((cell, ci) => {
+      if (!cell || cell.v === undefined || cell.v === '') return;
+      const ref = COLS[ci] + (ri + 1);
+      sheetXml += cell.t === 'n'
+        ? `<c r="${ref}" s="${cell.s}"><v>${cell.v}</v></c>`
+        : `<c r="${ref}" t="inlineStr" s="${cell.s}"><is><t>${esc(cell.v)}</t></is></c>`;
+    });
+    sheetXml += `</row>`;
+  });
+  sheetXml += `</sheetData></worksheet>`;
+
+  // ── XLSX package ───────────────────────────────────────────────────────────
+  return zip([
+    ['[Content_Types].xml', `<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>`],
+    ['_rels/.rels', `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`],
+    ['xl/workbook.xml', `<?xml version="1.0" encoding="UTF-8"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Orçamento" sheetId="1" r:id="rId1"/></sheets></workbook>`],
+    ['xl/_rels/workbook.xml.rels', `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`],
+    ['xl/styles.xml', `<?xml version="1.0" encoding="UTF-8"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts><numFmt numFmtId="164" formatCode="&quot;R$ &quot;#,##0.00"/></numFmts><fonts count="3"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFF6633"/></patternFill></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="4"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"><alignment horizontal="center" wrapText="1"/></xf><xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/><xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/></cellXfs></styleSheet>`],
+    ['xl/worksheets/sheet1.xml', sheetXml],
+  ]);
+}
