@@ -239,6 +239,41 @@ render();
 
 // ─── Export XLSX ─────────────────────────────────────────────────────────────
 
+// Fetch an image URL and normalize it through canvas → clean 8-bit PNG for Excel
+async function normalizeImage(url) {
+  if (!url) return null;
+  try {
+    const resp = await fetch(url);
+    if (!resp.ok) return null;
+    const blob = await resp.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    return await new Promise(resolve => {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const MAX = 200;
+          const w = img.naturalWidth  || 1;
+          const h = img.naturalHeight || 1;
+          const scale = Math.min(1, MAX / Math.max(w, h));
+          const canvas = document.createElement('canvas');
+          canvas.width  = Math.max(1, Math.round(w * scale));
+          canvas.height = Math.max(1, Math.round(h * scale));
+          canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+          canvas.toBlob(b => {
+            URL.revokeObjectURL(blobUrl);
+            if (!b) { resolve(null); return; }
+            b.arrayBuffer()
+              .then(ab => resolve({ data: new Uint8Array(ab), ext: 'png' }))
+              .catch(() => resolve(null));
+          }, 'image/png');
+        } catch { URL.revokeObjectURL(blobUrl); resolve(null); }
+      };
+      img.onerror = () => { URL.revokeObjectURL(blobUrl); resolve(null); };
+      img.src = blobUrl;
+    });
+  } catch { return null; }
+}
+
 document.getElementById('xlsxBtn').addEventListener('click', async () => {
   const btn = document.getElementById('xlsxBtn');
   btn.textContent = '⏳ Buscando imagens...';
@@ -247,19 +282,9 @@ document.getElementById('xlsxBtn').addEventListener('click', async () => {
     const { products = [], projectName = 'Orçamento' } =
       await chrome.storage.local.get(['products', 'projectName']);
 
-    const fetchedImages = await Promise.all(products.map(async p => {
-      if (!p.img) return null;
-      try {
-        const resp = await fetch(p.img);
-        if (!resp.ok) return null;
-        const data = new Uint8Array(await resp.arrayBuffer());
-        // Validate by magic bytes — ignore Content-Type (CDNs often send octet-stream)
-        const isJpeg = data[0] === 0xFF && data[1] === 0xD8 && data[2] === 0xFF;
-        const isPng  = data[0] === 0x89 && data[1] === 0x50 && data[2] === 0x4E && data[3] === 0x47;
-        if (!isJpeg && !isPng) return null;
-        return { data, ext: isPng ? 'png' : 'jpeg' };
-      } catch { return null; }
-    }));
+    // Normalize every image through canvas → guarantees a clean 8-bit PNG that Excel accepts,
+    // regardless of original format (WebP, interlaced PNG, 16-bit PNG, AVIF, GIF, etc.)
+    const fetchedImages = await Promise.all(products.map(p => normalizeImage(p.img)));
 
     btn.textContent = '⏳ Gerando arquivo...';
     const blob = buildXLSX(products, projectName, fetchedImages);
