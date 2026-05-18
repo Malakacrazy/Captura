@@ -1,26 +1,26 @@
 # Decorafit · Orçamento FF&E
 
-Chrome extension for interior designers to capture products from Brazilian e-commerce stores and generate professional PDF quotations.
+Extensão Chrome para designers de interiores capturarem produtos de lojas online brasileiras e gerarem orçamentos profissionais em PDF e Excel.
 
-## What it does
+## O que faz
 
-The extension injects a floating **"⊕ Orçamento"** button on every webpage. On supported product pages it automatically extracts the product name, brand, SKU, price, and image. Captured items are organized by category in a popup interface, and can be exported as a formatted A4 PDF quotation under the Decorafit visual identity. Projects can be saved to an in-browser library and reloaded at any time.
+A extensão injeta um botão flutuante **"⊕ Orçamento"** em todas as páginas. Nas páginas de produto das lojas suportadas, extrai automaticamente nome, marca, SKU, preço e imagem do item. Os produtos capturados são organizados por categoria em uma interface popup e podem ser exportados como orçamento A4 em PDF ou planilha Excel com a identidade visual da Decorafit. Os projetos podem ser salvos em uma biblioteca local e recarregados a qualquer momento.
 
-## Features
+## Funcionalidades
 
-- One-click product capture from 18+ Brazilian retailers
-- Automatic extraction of name, brand, SKU, price, and image
-- Smart category auto-detection based on product name
-- Popup interface with per-item quantity controls and manual entry form
-- Budget total calculated in real time, grouped by category
-- Professional PDF generation (A4, multi-page, Decorafit branding)
-- Excel (.xlsx) export with branded header, alternating row colors, per-category subtotals, and product images via `IMAGE()` formula
-- Project library: save, reload, rename, and delete past quotations
+- Captura de produtos com um clique em mais de 18 lojas brasileiras
+- Extração automática de nome, marca, SKU, preço e imagem
+- Detecção inteligente de categoria pelo nome do produto
+- Interface popup com controle de quantidade por item e formulário de entrada manual
+- Total do orçamento calculado em tempo real, agrupado por categoria
+- Geração de PDF profissional (A4, multipáginas, identidade Decorafit)
+- Exportação para Excel (.xlsx) com cabeçalho personalizado, cores alternadas por linha, subtotais por categoria e imagens dos produtos via fórmula `IMAGE()`
+- Biblioteca de projetos: salvar, recarregar, renomear e excluir orçamentos anteriores
 
-## Supported stores
+## Lojas suportadas
 
-| Store | Domain |
-|-------|--------|
+| Loja | Domínio |
+|------|---------|
 | Leroy Merlin | leroymerlin.com.br |
 | Telhanorte | telhanorte.com.br |
 | Obra Fácil | obrafacil.com.br |
@@ -41,33 +41,33 @@ The extension injects a floating **"⊕ Orçamento"** button on every webpage. O
 | Brastemp | brastemp.com.br |
 | Samsung | samsung.com/br |
 
-The extraction pipeline also works on any site via JSON-LD, Open Graph meta tags, and text-node price scanning as fallbacks.
+A extração também funciona em qualquer site por meio de JSON-LD, meta tags Open Graph e varredura de nós de texto como fallback.
 
-## Installation
+## Instalação
 
-1. Clone or download this repository.
-2. Open Chrome and go to `chrome://extensions/`.
-3. Enable **Developer mode** (toggle in the top-right corner).
-4. Click **Load unpacked**.
-5. Select the `decorafit-ffe/` directory inside this repo.
-6. The extension icon appears in the Chrome toolbar.
+1. Clone ou baixe este repositório.
+2. Abra o Chrome e acesse `chrome://extensions/`.
+3. Ative o **Modo do desenvolvedor** (botão no canto superior direito).
+4. Clique em **Carregar sem compactação**.
+5. Selecione a pasta `decorafit-ffe/` dentro do repositório.
+6. O ícone da extensão aparece na barra de ferramentas do Chrome.
 
-## Usage
+## Como usar
 
-1. Click the extension icon and enter a **project name** (e.g. *Sala de estar – Cliente X*).
-2. Browse to a product page on any supported store.
-3. Click the **⊕ Orçamento** button that appears at the bottom-right of the page.
-4. The product is captured and added to the popup list automatically.
-5. In the popup, adjust **category**, **quantity**, or any field as needed.
-6. Repeat for all products in your specification.
-7. Click **Gerar PDF** to open a print-ready PDF quotation in a new tab.
-   - On the print page, click **Salvar Excel** to download a branded `.xlsx` spreadsheet of the same quotation.
-8. Click **📂** to open the project library where you can save, reload, or delete projects.
+1. Clique no ícone da extensão e defina o **nome do projeto** (ex.: *Sala de estar – Cliente X*).
+2. Navegue até a página de um produto em qualquer loja suportada.
+3. Clique no botão **⊕ Orçamento** que aparece no canto inferior direito da página.
+4. O produto é capturado e adicionado automaticamente à lista no popup.
+5. No popup, ajuste **categoria**, **quantidade** ou qualquer outro campo conforme necessário.
+6. Repita para todos os produtos da especificação.
+7. Clique em **Gerar PDF** para abrir o orçamento pronto para impressão em uma nova aba.
+   - Na página de impressão, clique em **Salvar Excel** para baixar a planilha `.xlsx` com o mesmo orçamento.
+8. Clique em **📂** para abrir a biblioteca de projetos, onde é possível salvar, recarregar ou excluir projetos.
 
-## Product categories
+## Categorias de produtos
 
-| Key | Label |
-|-----|-------|
+| Chave | Rótulo |
+|-------|--------|
 | `revestimentos` | Revestimentos |
 | `loucas-metais` | Louças & Metais |
 | `iluminacao` | Iluminação |
@@ -76,27 +76,27 @@ The extraction pipeline also works on any site via JSON-LD, Open Graph meta tags
 | `decoracao-enxoval` | Decoração e Enxoval |
 | `outros` | Outros |
 
-## Project structure
+## Estrutura do projeto
 
 ```
 decorafit-ffe/
-├── manifest.json   # Extension manifest (Manifest V3)
-├── background.js   # Service worker — handles extension lifecycle events
-├── content.js      # Injected on every page — floating button and product extraction
-├── content.css     # Styles for the floating button and toast notifications
-├── popup.html      # Popup UI markup
-├── popup.js        # Popup logic — product list, manual entry, totals, PDF trigger
-├── print.html      # PDF template
-├── print.js        # PDF rendering and Excel export — loads products, formats the quotation, builds .xlsx from scratch
-├── library.html    # Project library UI markup
-├── library.js      # Library logic — save, load, rename, delete projects
-└── icons/          # Extension icons (16 × 16, 48 × 48, 128 × 128)
+├── manifest.json   # Manifesto da extensão (Manifest V3)
+├── background.js   # Service worker — gerencia eventos do ciclo de vida da extensão
+├── content.js      # Injetado em todas as páginas — botão flutuante e extração de produtos
+├── content.css     # Estilos do botão flutuante e notificações toast
+├── popup.html      # Markup da interface popup
+├── popup.js        # Lógica do popup — lista de produtos, entrada manual, totais, geração de PDF
+├── print.html      # Template do PDF
+├── print.js        # Renderização do PDF e exportação Excel — carrega produtos, formata o orçamento e gera o .xlsx
+├── library.html    # Markup da interface da biblioteca de projetos
+├── library.js      # Lógica da biblioteca — salvar, carregar, renomear e excluir projetos
+└── icons/          # Ícones da extensão (16 × 16, 48 × 48, 128 × 128)
 ```
 
-## Tech stack
+## Tecnologias
 
-- **Vanilla JavaScript** (ES6+), HTML5, CSS3 — no build tools or bundlers
-- **Chrome Extension Manifest V3** — service worker, content scripts, storage API
-- **Chrome Storage API** — persists products and projects locally in the browser
-- **Custom OOXML/ZIP engine** — `.xlsx` files built entirely in JS without external libraries (ZIP container, CRC-32, OOXML parts, Excel `IMAGE()` formula for product thumbnails)
+- **Vanilla JavaScript** (ES6+), HTML5, CSS3 — sem ferramentas de build ou bundlers
+- **Chrome Extension Manifest V3** — service worker, content scripts, Storage API
+- **Chrome Storage API** — persiste produtos e projetos localmente no navegador
+- **Engine OOXML/ZIP customizada** — arquivos `.xlsx` gerados inteiramente em JS, sem bibliotecas externas (container ZIP, CRC-32, partes OOXML, fórmula `IMAGE()` do Excel para miniaturas dos produtos)
 - **Google Fonts** — Cormorant Garamond, Jost, Poppins
