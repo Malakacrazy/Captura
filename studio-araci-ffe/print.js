@@ -305,7 +305,7 @@ function buildXLSX(products, projectName) {
       parts.push(local, data);
       centrals.push(concat([
         new Uint8Array([0x50,0x4B,0x01,0x02]),
-        u16(20), u16(20), u16(0), u16(0), u16(0), u16(0), u16(0),
+        u16(20), u16(20), u16(0), u16(0), u16(0), u16(0),
         u32(crc), u32(data.length), u32(data.length),
         u16(nb.length), u16(0), u16(0), u16(0), u16(0),
         u32(0), u32(offset), nb
