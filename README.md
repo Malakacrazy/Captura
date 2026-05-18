@@ -14,6 +14,7 @@ The extension injects a floating **"⊕ Orçamento"** button on every webpage. O
 - Popup interface with per-item quantity controls and manual entry form
 - Budget total calculated in real time, grouped by category
 - Professional PDF generation (A4, multi-page, Decorafit branding)
+- Excel (.xlsx) export with branded header, alternating row colors, per-category subtotals, and product images via `IMAGE()` formula
 - Project library: save, reload, rename, and delete past quotations
 
 ## Supported stores
@@ -60,6 +61,7 @@ The extraction pipeline also works on any site via JSON-LD, Open Graph meta tags
 5. In the popup, adjust **category**, **quantity**, or any field as needed.
 6. Repeat for all products in your specification.
 7. Click **Gerar PDF** to open a print-ready PDF quotation in a new tab.
+   - On the print page, click **Salvar Excel** to download a branded `.xlsx` spreadsheet of the same quotation.
 8. Click **📂** to open the project library where you can save, reload, or delete projects.
 
 ## Product categories
@@ -85,7 +87,7 @@ decorafit-ffe/
 ├── popup.html      # Popup UI markup
 ├── popup.js        # Popup logic — product list, manual entry, totals, PDF trigger
 ├── print.html      # PDF template
-├── print.js        # PDF rendering — loads products and formats the quotation
+├── print.js        # PDF rendering and Excel export — loads products, formats the quotation, builds .xlsx from scratch
 ├── library.html    # Project library UI markup
 ├── library.js      # Library logic — save, load, rename, delete projects
 └── icons/          # Extension icons (16 × 16, 48 × 48, 128 × 128)
@@ -96,4 +98,5 @@ decorafit-ffe/
 - **Vanilla JavaScript** (ES6+), HTML5, CSS3 — no build tools or bundlers
 - **Chrome Extension Manifest V3** — service worker, content scripts, storage API
 - **Chrome Storage API** — persists products and projects locally in the browser
+- **Custom OOXML/ZIP engine** — `.xlsx` files built entirely in JS without external libraries (ZIP container, CRC-32, OOXML parts, Excel `IMAGE()` formula for product thumbnails)
 - **Google Fonts** — Cormorant Garamond, Jost, Poppins
