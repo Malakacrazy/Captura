@@ -246,7 +246,7 @@ document.getElementById('xlsxBtn').addEventListener('click', async () => {
   try {
     const { products = [], projectName = 'Orçamento' } =
       await chrome.storage.local.get(['products', 'projectName']);
-    const blob = await buildXLSX(products, projectName);
+    const blob = buildXLSX(products, projectName);
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -263,7 +263,7 @@ document.getElementById('xlsxBtn').addEventListener('click', async () => {
   }
 });
 
-async function buildXLSX(products, projectName) {
+function buildXLSX(products, projectName) {
   // ── Binary helpers ──────────────────────────────────────────────────────────
   const enc = s => new TextEncoder().encode(s);
   const concat = arrs => {
@@ -274,13 +274,6 @@ async function buildXLSX(products, projectName) {
   const u16 = n => new Uint8Array([n & 0xFF, (n >> 8) & 0xFF]);
   const u32 = n => { n = n >>> 0; return new Uint8Array([n & 0xFF, (n >>> 8) & 0xFF, (n >>> 16) & 0xFF, (n >>> 24) & 0xFF]); };
   const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-
-  // ── Fetch logo ───────────────────────────────────────────────────────────────
-  let logoBytes = null;
-  try {
-    const r = await fetch(chrome.runtime.getURL('icons/icon128.png'));
-    if (r.ok) logoBytes = new Uint8Array(await r.arrayBuffer());
-  } catch (_) {}
 
   // ── CRC-32 ──────────────────────────────────────────────────────────────────
   const crcTab = (() => {
@@ -343,9 +336,17 @@ async function buildXLSX(products, projectName) {
   };
 
   // ── Build rows ───────────────────────────────────────────────────────────────
+  // Style index map (see styles.xml below):
+  //  0=default  1=col-header  2=bold  3=currency  4=url-wrap
+  //  5=brand-hdr  6=proj-name
+  //  7=data-even  8=data-odd  9=num-even  10=num-odd  11=url-even  12=url-odd
+  //  13=sub-label  14=sub-num
   const cv = (v, t, s) => ({v, t, s});
   const rows = [];
-  const imgRows = new Set();
+  const imgRows   = new Set(); // rows with IMAGE() formula → taller height
+  const dataEven  = new Set(); // product rows (even) → emit all 9 cols
+  const dataOdd   = new Set(); // product rows (odd)
+  const subRows   = new Set(); // subtotal/total rows → emit all 9 cols
 
   rows.push([cv('DECORAFIT','s',5)]);
   rows.push([cv(projectName,'s',6)]);
@@ -357,6 +358,7 @@ async function buildXLSX(products, projectName) {
   ]);
 
   let grandTotal = 0;
+  let pCounter = 0;
   for (const [catId, catLabel] of Object.entries(CATS_LABELS)) {
     const items = products
       .map((p, i) => ({p, i}))
@@ -365,30 +367,38 @@ async function buildXLSX(products, projectName) {
     let catTotal = 0;
     for (const {p} of items) {
       const rowIdx = rows.length;
+      const odd = pCounter % 2 === 1;
+      pCounter++;
       if (p.img) imgRows.add(rowIdx);
+      if (odd) dataOdd.add(rowIdx); else dataEven.add(rowIdx);
+      const ds = odd ? 8  : 7;   // data style
+      const ns = odd ? 10 : 9;   // number/currency style
+      const us = odd ? 12 : 11;  // url style
       const sub = (p.price || 0) * (p.qty || 1);
       catTotal += sub;
       rows.push([
-        // IMAGE() formula — Excel 365 loads image from URL directly into the cell
-        p.img ? cv(`IMAGE("${p.img}")`, 'f', 0) : cv('','s',0),
-        cv(catLabel,'s',0), cv(p.name||'','s',0), cv(p.brand||'','s',0), cv(p.sku||'','s',0),
-        cv(p.qty||1,'n',0), cv(p.price||0,'n',3), cv(sub,'n',3), cv(p.url||'','s',4)
+        p.img ? cv(`IMAGE("${p.img}")`, 'f', ds) : cv('', 's', ds),
+        cv(catLabel,'s',ds), cv(p.name||'','s',ds), cv(p.brand||'','s',ds), cv(p.sku||'','s',ds),
+        cv(p.qty||1,'n',ns), cv(p.price||0,'n',ns), cv(sub,'n',ns), cv(p.url||'','s',us)
       ]);
     }
     grandTotal += catTotal;
-    rows.push([{},{},{},{},{},{}, cv('Subtotal:','s',2), cv(catTotal,'n',3)]);
+    const subIdx = rows.length;
+    subRows.add(subIdx);
+    rows.push([null,null,null,null,null,null, cv('Subtotal:','s',13), cv(catTotal,'n',14)]);
     rows.push([]);
   }
-  rows.push([{},{},{},{},{},{}, cv('TOTAL GERAL:','s',2), cv(grandTotal,'n',3)]);
+  const totalIdx = rows.length;
+  subRows.add(totalIdx);
+  rows.push([null,null,null,null,null,null, cv('TOTAL GERAL:','s',13), cv(grandTotal,'n',14)]);
 
   // ── Sheet XML ────────────────────────────────────────────────────────────────
-  const hasLogo = !!logoBytes;
-  const R_NS = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
   const COLS = 'ABCDEFGHI';
+  const fixedHeights = { 0: ' ht="40" customHeight="1"', 1: ' ht="22" customHeight="1"' };
   let sheetXml =
     `<?xml version="1.0" encoding="UTF-8"?>` +
-    `<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"` +
-    (hasLogo ? ` xmlns:r="${R_NS}"` : '') + `>` +
+    `<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">` +
+    `<sheetViews><sheetView showGridLines="0" workbookViewId="0"/></sheetViews>` +
     `<cols>` +
     `<col min="1" max="1" width="20" customWidth="1"/>` +
     `<col min="2" max="2" width="18" customWidth="1"/>` +
@@ -401,43 +411,52 @@ async function buildXLSX(products, projectName) {
     `<col min="9" max="9" width="45" customWidth="1"/>` +
     `</cols><sheetData>`;
 
-  const fixedHeights = { 0: ' ht="40" customHeight="1"', 1: ' ht="22" customHeight="1"' };
   rows.forEach((row, ri) => {
     const tall = fixedHeights[ri] ?? (imgRows.has(ri) ? ' ht="60" customHeight="1"' : '');
-    if (!row.length) { sheetXml += `<row r="${ri+1}"${tall}/>`; return; }
+    const isData = dataEven.has(ri) || dataOdd.has(ri);
+    const isSub  = subRows.has(ri);
+    const numCols = (isData || isSub) ? 9 : row.length;
+    if (!numCols) { sheetXml += `<row r="${ri+1}"${tall}/>`; return; }
     sheetXml += `<row r="${ri+1}"${tall}>`;
-    row.forEach((cell, ci) => {
-      if (!cell || cell.v === undefined || cell.v === '') return;
-      const ref = COLS[ci] + (ri + 1);
-      sheetXml += cell.t === 'n'
-        ? `<c r="${ref}" s="${cell.s}"><v>${cell.v}</v></c>`
-        : cell.t === 'f'
-        ? `<c r="${ref}" s="${cell.s}"><f>${esc(cell.v)}</f></c>`
-        : `<c r="${ref}" t="inlineStr" s="${cell.s}"><is><t>${esc(cell.v)}</t></is></c>`;
-    });
+    for (let ci = 0; ci < numCols; ci++) {
+      const cell = row[ci];
+      const ref  = COLS[ci] + (ri + 1);
+      // Emit empty styled cell to carry border across the full row
+      if (!cell || cell.v === undefined || cell.v === null) {
+        const fallback = isSub ? 13 : (dataOdd.has(ri) ? 8 : (isData ? 7 : -1));
+        if (fallback >= 0) sheetXml += `<c r="${ref}" s="${fallback}"/>`;
+        continue;
+      }
+      if (cell.v === '') {
+        sheetXml += `<c r="${ref}" s="${cell.s}"/>`;
+      } else if (cell.t === 'n') {
+        sheetXml += `<c r="${ref}" s="${cell.s}"><v>${cell.v}</v></c>`;
+      } else if (cell.t === 'f') {
+        sheetXml += `<c r="${ref}" s="${cell.s}"><f>${esc(cell.v)}</f></c>`;
+      } else {
+        sheetXml += `<c r="${ref}" t="inlineStr" s="${cell.s}"><is><t>${esc(cell.v)}</t></is></c>`;
+      }
+    }
     sheetXml += `</row>`;
   });
   sheetXml +=
     `</sheetData>` +
     `<mergeCells count="2"><mergeCell ref="A1:I1"/><mergeCell ref="A2:I2"/></mergeCells>` +
-    (hasLogo ? `<drawing r:id="rId1"/>` : '') +
     `</worksheet>`;
 
   // ── XLSX package ─────────────────────────────────────────────────────────────
   const CT  = `http://schemas.openxmlformats.org/package/2006/content-types`;
   const PKG = `http://schemas.openxmlformats.org/package/2006/relationships`;
-  const DOC = R_NS;
+  const DOC = `http://schemas.openxmlformats.org/officeDocument/2006/relationships`;
 
   return zip([
     ['[Content_Types].xml',
       `<?xml version="1.0" encoding="UTF-8"?><Types xmlns="${CT}">` +
       `<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>` +
       `<Default Extension="xml" ContentType="application/xml"/>` +
-      (hasLogo ? `<Default Extension="png" ContentType="image/png"/>` : '') +
       `<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>` +
       `<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>` +
       `<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>` +
-      (hasLogo ? `<Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/>` : '') +
       `</Types>`],
     ['_rels/.rels',
       `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="${PKG}">` +
@@ -455,56 +474,51 @@ async function buildXLSX(products, projectName) {
     ['xl/styles.xml',
       `<?xml version="1.0" encoding="UTF-8"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">` +
       `<numFmts><numFmt numFmtId="164" formatCode="&quot;R$ &quot;#,##0.00"/></numFmts>` +
+      // Fonts: 0=normal  1=bold-white(headers)  2=bold-black  3=bold-white-18pt(brand)
       `<fonts count="4">` +
       `<font><sz val="11"/><name val="Calibri"/></font>` +
       `<font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font>` +
       `<font><b/><sz val="11"/><name val="Calibri"/></font>` +
       `<font><b/><sz val="18"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font>` +
       `</fonts>` +
-      `<fills count="4">` +
+      // Fills: 0=none  1=gray125  2=orange#FF6633  3=light-orange#FFF0E8  4=alt-row#F5F0EE
+      `<fills count="5">` +
       `<fill><patternFill patternType="none"/></fill>` +
       `<fill><patternFill patternType="gray125"/></fill>` +
       `<fill><patternFill patternType="solid"><fgColor rgb="FFFF6633"/></patternFill></fill>` +
       `<fill><patternFill patternType="solid"><fgColor rgb="FFFFF0E8"/></patternFill></fill>` +
+      `<fill><patternFill patternType="solid"><fgColor rgb="FFF5F0EE"/></patternFill></fill>` +
       `</fills>` +
-      `<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>` +
+      // Borders: 0=none  1=thin-bottom-gray  2=medium-bottom-orange
+      `<borders count="3">` +
+      `<border><left/><right/><top/><bottom/><diagonal/></border>` +
+      `<border><left/><right/><top/><bottom style="thin"><color rgb="FFD0D0D0"/></bottom><diagonal/></border>` +
+      `<border><left/><right/><top/><bottom style="medium"><color rgb="FFFF6633"/></bottom><diagonal/></border>` +
+      `</borders>` +
       `<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>` +
-      `<cellXfs count="7">` +
+      // cellXfs:
+      //  0=default  1=col-hdr  2=bold  3=currency  4=url-wrap
+      //  5=brand-hdr  6=proj-name
+      //  7=data-even  8=data-odd  9=num-even  10=num-odd  11=url-even  12=url-odd
+      //  13=sub-label  14=sub-num
+      `<cellXfs count="15">` +
       `<xf numFmtId="0"   fontId="0" fillId="0" borderId="0" xfId="0"/>` +
-      `<xf numFmtId="0"   fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"><alignment horizontal="center" wrapText="1"/></xf>` +
+      `<xf numFmtId="0"   fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"><alignment horizontal="center" wrapText="1"/></xf>` +
       `<xf numFmtId="0"   fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/>` +
       `<xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>` +
       `<xf numFmtId="0"   fontId="0" fillId="0" borderId="0" xfId="0"><alignment wrapText="1" vertical="top"/></xf>` +
       `<xf numFmtId="0"   fontId="3" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"><alignment horizontal="center" vertical="center"/></xf>` +
       `<xf numFmtId="0"   fontId="2" fillId="3" borderId="0" xfId="0" applyFont="1" applyFill="1"><alignment horizontal="center" vertical="center"/></xf>` +
+      `<xf numFmtId="0"   fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1"/>` +
+      `<xf numFmtId="0"   fontId="0" fillId="4" borderId="1" xfId="0" applyFill="1" applyBorder="1"/>` +
+      `<xf numFmtId="164" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1"/>` +
+      `<xf numFmtId="164" fontId="0" fillId="4" borderId="1" xfId="0" applyNumberFormat="1" applyFill="1" applyBorder="1"/>` +
+      `<xf numFmtId="0"   fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1"><alignment wrapText="1" vertical="top"/></xf>` +
+      `<xf numFmtId="0"   fontId="0" fillId="4" borderId="1" xfId="0" applyFill="1" applyBorder="1"><alignment wrapText="1" vertical="top"/></xf>` +
+      `<xf numFmtId="0"   fontId="2" fillId="0" borderId="2" xfId="0" applyFont="1" applyBorder="1"/>` +
+      `<xf numFmtId="164" fontId="2" fillId="0" borderId="2" xfId="0" applyFont="1" applyNumberFormat="1" applyBorder="1"/>` +
       `</cellXfs></styleSheet>`],
     ['xl/worksheets/sheet1.xml', sheetXml],
-    ...(hasLogo ? [
-      ['xl/media/logo.png', logoBytes],
-      ['xl/drawings/drawing1.xml',
-        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
-        `<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing"` +
-        ` xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">` +
-        `<xdr:oneCellAnchor>` +
-        `<xdr:from><xdr:col>7</xdr:col><xdr:colOff>200000</xdr:colOff><xdr:row>0</xdr:row><xdr:rowOff>50000</xdr:rowOff></xdr:from>` +
-        `<xdr:ext cx="420000" cy="420000"/>` +
-        `<xdr:pic>` +
-        `<xdr:nvPicPr><xdr:cNvPr id="2" name="logo"/><xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr></xdr:nvPicPr>` +
-        `<xdr:blipFill><a:blip xmlns:r="${R_NS}" r:embed="rId1"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill>` +
-        `<xdr:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="420000" cy="420000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr>` +
-        `</xdr:pic><xdr:clientData/>` +
-        `</xdr:oneCellAnchor></xdr:wsDr>`],
-      ['xl/drawings/_rels/drawing1.xml.rels',
-        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
-        `<Relationships xmlns="${PKG}">` +
-        `<Relationship Id="rId1" Type="${DOC}/image" Target="../media/logo.png"/>` +
-        `</Relationships>`],
-      ['xl/worksheets/_rels/sheet1.xml.rels',
-        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
-        `<Relationships xmlns="${PKG}">` +
-        `<Relationship Id="rId1" Type="${DOC}/drawing" Target="../drawings/drawing1.xml"/>` +
-        `</Relationships>`],
-    ] : []),
   ]);
 }
 
