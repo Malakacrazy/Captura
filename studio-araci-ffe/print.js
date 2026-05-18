@@ -270,7 +270,7 @@ document.getElementById('xlsxBtn').addEventListener('click', async () => {
   } catch (err) {
     console.error('xlsx export error:', err);
   } finally {
-    btn.textContent = '📊 Exportar .xlsx';
+    btn.textContent = '📊 Salvar Excel';
     btn.disabled = false;
   }
 });
