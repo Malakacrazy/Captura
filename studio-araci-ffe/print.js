@@ -374,12 +374,13 @@ function buildXLSX(products, projectName) {
       const ds = odd ? 8  : 7;   // data style
       const ns = odd ? 10 : 9;   // number/currency style
       const us = odd ? 12 : 11;  // url style
+      const qs = odd ? 16 : 15;  // qty style (integer, no decimals)
       const sub = (p.price || 0) * (p.qty || 1);
       catTotal += sub;
       rows.push([
         p.img ? cv(`IMAGE("${p.img}")`, 'f', ds) : cv('', 's', ds),
         cv(catLabel,'s',ds), cv(p.name||'','s',ds), cv(p.brand||'','s',ds), cv(p.sku||'','s',ds),
-        cv(p.qty||1,'n',ns), cv(p.price||0,'n',ns), cv(sub,'n',ns), cv(p.url||'','s',us)
+        cv(p.qty||1,'n',qs), cv(p.price||0,'n',ns), cv(sub,'n',ns), cv(p.url||'','s',us)
       ]);
     }
     grandTotal += catTotal;
@@ -400,7 +401,7 @@ function buildXLSX(products, projectName) {
     `<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">` +
     `<sheetViews><sheetView showGridLines="0" workbookViewId="0"/></sheetViews>` +
     `<cols>` +
-    `<col min="1" max="1" width="20" customWidth="1"/>` +
+    `<col min="1" max="1" width="18" customWidth="1"/>` +
     `<col min="2" max="2" width="18" customWidth="1"/>` +
     `<col min="3" max="3" width="40" customWidth="1"/>` +
     `<col min="4" max="4" width="15" customWidth="1"/>` +
@@ -501,7 +502,7 @@ function buildXLSX(products, projectName) {
       //  5=brand-hdr  6=proj-name
       //  7=data-even  8=data-odd  9=num-even  10=num-odd  11=url-even  12=url-odd
       //  13=sub-label  14=sub-num
-      `<cellXfs count="15">` +
+      `<cellXfs count="17">` +
       `<xf numFmtId="0"   fontId="0" fillId="0" borderId="0" xfId="0"/>` +
       `<xf numFmtId="0"   fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"><alignment horizontal="center" wrapText="1"/></xf>` +
       `<xf numFmtId="0"   fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/>` +
@@ -517,6 +518,8 @@ function buildXLSX(products, projectName) {
       `<xf numFmtId="0"   fontId="0" fillId="4" borderId="1" xfId="0" applyFill="1" applyBorder="1"><alignment wrapText="1" vertical="top"/></xf>` +
       `<xf numFmtId="0"   fontId="2" fillId="0" borderId="2" xfId="0" applyFont="1" applyBorder="1"/>` +
       `<xf numFmtId="164" fontId="2" fillId="0" borderId="2" xfId="0" applyFont="1" applyNumberFormat="1" applyBorder="1"/>` +
+      `<xf numFmtId="1"   fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1"/>` +
+      `<xf numFmtId="1"   fontId="0" fillId="4" borderId="1" xfId="0" applyNumberFormat="1" applyFill="1" applyBorder="1"/>` +
       `</cellXfs></styleSheet>`],
     ['xl/worksheets/sheet1.xml', sheetXml],
   ]);
