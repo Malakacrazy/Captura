@@ -241,27 +241,42 @@ render();
 
 document.getElementById('xlsxBtn').addEventListener('click', async () => {
   const btn = document.getElementById('xlsxBtn');
-  btn.textContent = '⏳ Gerando...';
+  btn.textContent = '⏳ Buscando imagens...';
   btn.disabled = true;
   try {
-    const data = await chrome.storage.local.get(['products', 'projectName']);
-    const blob = buildXLSX(data.products || [], data.projectName || 'Orçamento');
+    const { products = [], projectName = 'Orçamento' } =
+      await chrome.storage.local.get(['products', 'projectName']);
+
+    const fetchedImages = await Promise.all(products.map(async p => {
+      if (!p.img) return null;
+      try {
+        const resp = await fetch(p.img);
+        if (!resp.ok) return null;
+        const ct = (resp.headers.get('content-type') || 'image/jpeg').split(';')[0].trim();
+        return { data: new Uint8Array(await resp.arrayBuffer()), ext: ct.includes('png') ? 'png' : 'jpeg' };
+      } catch { return null; }
+    }));
+
+    btn.textContent = '⏳ Gerando arquivo...';
+    const blob = buildXLSX(products, projectName, fetchedImages);
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = (data.projectName || 'Orçamento').replace(/[/\\?%*:|"<>]/g, '-') + '.xlsx';
+    a.download = projectName.replace(/[/\\?%*:|"<>]/g, '-') + '.xlsx';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+  } catch (err) {
+    console.error('xlsx export error:', err);
   } finally {
     btn.textContent = '📊 Exportar .xlsx';
     btn.disabled = false;
   }
 });
 
-function buildXLSX(products, projectName) {
-  // ── Helpers ────────────────────────────────────────────────────────────────
+function buildXLSX(products, projectName, fetchedImages) {
+  // ── Binary helpers ──────────────────────────────────────────────────────────
   const enc = s => new TextEncoder().encode(s);
   const concat = arrs => {
     const out = new Uint8Array(arrs.reduce((s, a) => s + a.length, 0));
@@ -272,12 +287,11 @@ function buildXLSX(products, projectName) {
   const u32 = n => { n = n >>> 0; return new Uint8Array([n & 0xFF, (n >>> 8) & 0xFF, (n >>> 16) & 0xFF, (n >>> 24) & 0xFF]); };
   const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
-  // ── CRC-32 ─────────────────────────────────────────────────────────────────
+  // ── CRC-32 ──────────────────────────────────────────────────────────────────
   const crcTab = (() => {
     const t = new Uint32Array(256);
     for (let i = 0; i < 256; i++) {
-      let c = i;
-      for (let j = 8; j--;) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1;
+      let c = i; for (let j = 8; j--;) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1;
       t[i] = c;
     }
     return t;
@@ -288,29 +302,28 @@ function buildXLSX(products, projectName) {
     return (c ^ 0xFFFFFFFF) >>> 0;
   };
 
-  // ── Minimal ZIP ────────────────────────────────────────────────────────────
+  // ── Minimal ZIP ─────────────────────────────────────────────────────────────
   function zip(files) {
     const parts = [], centrals = [];
     let offset = 0;
     for (const [name, content] of files) {
       const nb = enc(name);
       const data = typeof content === 'string' ? enc(content) : content;
-      const crc = crc32(data);
+      const crc = crc32(data), sz = data.length;
       const local = concat([
         new Uint8Array([0x50,0x4B,0x03,0x04]),
         u16(20), u16(0), u16(0), u16(0), u16(0),
-        u32(crc), u32(data.length), u32(data.length),
-        u16(nb.length), u16(0), nb
+        u32(crc), u32(sz), u32(sz), u16(nb.length), u16(0), nb
       ]);
       parts.push(local, data);
       centrals.push(concat([
         new Uint8Array([0x50,0x4B,0x01,0x02]),
         u16(20), u16(20), u16(0), u16(0), u16(0), u16(0),
-        u32(crc), u32(data.length), u32(data.length),
+        u32(crc), u32(sz), u32(sz),
         u16(nb.length), u16(0), u16(0), u16(0), u16(0),
         u32(0), u32(offset), nb
       ]));
-      offset += local.length + data.length;
+      offset += local.length + sz;
     }
     const cd = concat(centrals);
     const eocd = concat([
@@ -323,8 +336,7 @@ function buildXLSX(products, projectName) {
     });
   }
 
-  // ── Worksheet rows ─────────────────────────────────────────────────────────
-  // cell: {v, t:'s'|'n', s:styleIndex}
+  // ── Category labels ─────────────────────────────────────────────────────────
   const CATS_LABELS = {
     'revestimentos':     'Revestimentos',
     'loucas-metais':     'Louças e Metais',
@@ -335,41 +347,91 @@ function buildXLSX(products, projectName) {
     'outros':            'Outros'
   };
 
+  // ── Build rows + track product rows for image anchors ────────────────────────
+  const cv = (v, t, s) => ({v, t, s});
   const rows = [];
-  const s = (v, t, style) => ({v, t, s: style});
+  // {rowIdx (0-based xlsx row), img: {data, ext} | null}
+  const productAnchors = [];
 
-  rows.push([s(projectName, 's', 2)]);
-  rows.push([]);
-  rows.push([
-    s('Categoria','s',1), s('Produto','s',1), s('Marca','s',1), s('SKU','s',1),
-    s('Qtd','s',1), s('Preço Unit. (R$)','s',1), s('Subtotal (R$)','s',1), s('URL','s',1)
+  rows.push([cv(projectName,'s',2)]);  // index 0
+  rows.push([]);                        // index 1  (blank)
+  rows.push([                           // index 2  (header)
+    cv('Imagem','s',1), cv('Categoria','s',1), cv('Produto','s',1),
+    cv('Marca','s',1), cv('SKU','s',1), cv('Qtd','s',1),
+    cv('Preço Unit. (R$)','s',1), cv('Subtotal (R$)','s',1), cv('URL','s',1)
   ]);
 
   let grandTotal = 0;
   for (const [catId, catLabel] of Object.entries(CATS_LABELS)) {
-    const items = products.filter(p => (p.category || 'outros') === catId);
+    const items = products
+      .map((p, i) => ({p, i}))
+      .filter(({p}) => (p.category || 'outros') === catId);
     if (!items.length) continue;
     let catTotal = 0;
-    for (const p of items) {
+    for (const {p, i} of items) {
+      const rowIdx = rows.length;
+      const img = fetchedImages?.[i] ?? null;
+      productAnchors.push({rowIdx, img});
       const sub = (p.price || 0) * (p.qty || 1);
       catTotal += sub;
       rows.push([
-        s(catLabel,'s',0), s(p.name||'','s',0), s(p.brand||'','s',0), s(p.sku||'','s',0),
-        s(p.qty||1,'n',0), s(p.price||0,'n',3), s(sub,'n',3), s(p.url||'','s',0)
+        cv('','s',0),
+        cv(catLabel,'s',0), cv(p.name||'','s',0), cv(p.brand||'','s',0), cv(p.sku||'','s',0),
+        cv(p.qty||1,'n',0), cv(p.price||0,'n',3), cv(sub,'n',3), cv(p.url||'','s',0)
       ]);
     }
     grandTotal += catTotal;
-    rows.push([{},{},{},{},{}, s('Subtotal:','s',2), s(catTotal,'n',3)]);
+    rows.push([{},{},{},{},{},{}, cv('Subtotal:','s',2), cv(catTotal,'n',3)]);
     rows.push([]);
   }
-  rows.push([{},{},{},{},{}, s('TOTAL GERAL:','s',2), s(grandTotal,'n',3)]);
+  rows.push([{},{},{},{},{},{}, cv('TOTAL GERAL:','s',2), cv(grandTotal,'n',3)]);
 
-  // ── Sheet XML ──────────────────────────────────────────────────────────────
-  const COLS = 'ABCDEFGH';
-  let sheetXml = `<?xml version="1.0" encoding="UTF-8"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><cols><col min="1" max="1" width="18" customWidth="1"/><col min="2" max="2" width="40" customWidth="1"/><col min="3" max="3" width="15" customWidth="1"/><col min="4" max="4" width="15" customWidth="1"/><col min="5" max="5" width="6" customWidth="1"/><col min="6" max="6" width="18" customWidth="1"/><col min="7" max="7" width="18" customWidth="1"/><col min="8" max="8" width="45" customWidth="1"/></cols><sheetData>`;
+  // ── Media files + drawing anchors ────────────────────────────────────────────
+  const mediaFiles = [];
+  const drawingRelEntries = [];
+  let imgCounter = 0;
+
+  for (const anchor of productAnchors) {
+    if (!anchor.img) continue;
+    imgCounter++;
+    anchor.rId   = `rId${imgCounter}`;
+    anchor.picId = imgCounter;
+    const fname  = `xl/media/image${imgCounter}.${anchor.img.ext}`;
+    mediaFiles.push([fname, anchor.img.data]);
+    drawingRelEntries.push(
+      `<Relationship Id="${anchor.rId}" ` +
+      `Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" ` +
+      `Target="../media/image${imgCounter}.${anchor.img.ext}"/>`
+    );
+  }
+
+  const hasDrawing = imgCounter > 0;
+  const hasJpeg    = productAnchors.some(a => a.img?.ext === 'jpeg');
+  const hasPng     = productAnchors.some(a => a.img?.ext === 'png');
+  const productRowSet = new Set(productAnchors.map(a => a.rowIdx));
+
+  // ── Sheet XML ────────────────────────────────────────────────────────────────
+  const COLS = 'ABCDEFGHI';
+  let sheetXml =
+    `<?xml version="1.0" encoding="UTF-8"?>` +
+    `<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"` +
+    (hasDrawing ? ` xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"` : '') + `>` +
+    `<cols>` +
+    `<col min="1" max="1" width="9"  customWidth="1"/>` +
+    `<col min="2" max="2" width="18" customWidth="1"/>` +
+    `<col min="3" max="3" width="40" customWidth="1"/>` +
+    `<col min="4" max="4" width="15" customWidth="1"/>` +
+    `<col min="5" max="5" width="15" customWidth="1"/>` +
+    `<col min="6" max="6" width="6"  customWidth="1"/>` +
+    `<col min="7" max="7" width="18" customWidth="1"/>` +
+    `<col min="8" max="8" width="18" customWidth="1"/>` +
+    `<col min="9" max="9" width="45" customWidth="1"/>` +
+    `</cols><sheetData>`;
+
   rows.forEach((row, ri) => {
-    if (!row.length) { sheetXml += `<row r="${ri+1}"/>`; return; }
-    sheetXml += `<row r="${ri+1}">`;
+    const tall = productRowSet.has(ri) ? ` ht="50" customHeight="1"` : '';
+    if (!row.length) { sheetXml += `<row r="${ri+1}"${tall}/>`; return; }
+    sheetXml += `<row r="${ri+1}"${tall}>`;
     row.forEach((cell, ci) => {
       if (!cell || cell.v === undefined || cell.v === '') return;
       const ref = COLS[ci] + (ri + 1);
@@ -379,15 +441,101 @@ function buildXLSX(products, projectName) {
     });
     sheetXml += `</row>`;
   });
-  sheetXml += `</sheetData></worksheet>`;
+  sheetXml += `</sheetData>`;
+  if (hasDrawing) sheetXml += `<drawing r:id="rId1"/>`;
+  sheetXml += `</worksheet>`;
 
-  // ── XLSX package ───────────────────────────────────────────────────────────
-  return zip([
-    ['[Content_Types].xml', `<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>`],
-    ['_rels/.rels', `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`],
-    ['xl/workbook.xml', `<?xml version="1.0" encoding="UTF-8"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Orçamento" sheetId="1" r:id="rId1"/></sheets></workbook>`],
-    ['xl/_rels/workbook.xml.rels', `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`],
-    ['xl/styles.xml', `<?xml version="1.0" encoding="UTF-8"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts><numFmt numFmtId="164" formatCode="&quot;R$ &quot;#,##0.00"/></numFmts><fonts count="3"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFF6633"/></patternFill></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="4"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"><alignment horizontal="center" wrapText="1"/></xf><xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/><xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/></cellXfs></styleSheet>`],
+  // ── Drawing XML ──────────────────────────────────────────────────────────────
+  let drawingXml = '';
+  if (hasDrawing) {
+    const NS_XDR = `xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing"`;
+    const NS_A   = `xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"`;
+    const NS_R   = `xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"`;
+    drawingXml = `<?xml version="1.0" encoding="UTF-8"?><xdr:wsDr ${NS_XDR} ${NS_A} ${NS_R}>`;
+    for (const a of productAnchors) {
+      if (!a.img) continue;
+      // 457200 EMU = 0.5 inch image; 76200 = 6pt padding
+      drawingXml +=
+        `<xdr:oneCellAnchor>` +
+        `<xdr:from><xdr:col>0</xdr:col><xdr:colOff>76200</xdr:colOff><xdr:row>${a.rowIdx}</xdr:row><xdr:rowOff>76200</xdr:rowOff></xdr:from>` +
+        `<xdr:ext cx="457200" cy="457200"/>` +
+        `<xdr:pic>` +
+        `<xdr:nvPicPr><xdr:cNvPr id="${a.picId}" name="Img${a.picId}"/><xdr:cNvPicPr/></xdr:nvPicPr>` +
+        `<xdr:blipFill><a:blip r:embed="${a.rId}"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill>` +
+        `<xdr:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="457200" cy="457200"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr>` +
+        `</xdr:pic><xdr:clientData/>` +
+        `</xdr:oneCellAnchor>`;
+    }
+    drawingXml += `</xdr:wsDr>`;
+  }
+
+  // ── XLSX package ─────────────────────────────────────────────────────────────
+  const CT = `http://schemas.openxmlformats.org/package/2006/content-types`;
+  const ctXml =
+    `<?xml version="1.0" encoding="UTF-8"?><Types xmlns="${CT}">` +
+    `<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>` +
+    `<Default Extension="xml" ContentType="application/xml"/>` +
+    (hasJpeg ? `<Default Extension="jpeg" ContentType="image/jpeg"/>` : '') +
+    (hasPng  ? `<Default Extension="png"  ContentType="image/png"/>` : '') +
+    `<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>` +
+    `<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>` +
+    `<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>` +
+    (hasDrawing ? `<Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawingml.spreadsheetDrawing+xml"/>` : '') +
+    `</Types>`;
+
+  const PKG = `http://schemas.openxmlformats.org/package/2006/relationships`;
+  const DOC = `http://schemas.openxmlformats.org/officeDocument/2006/relationships`;
+
+  const files = [
+    ['[Content_Types].xml', ctXml],
+    ['_rels/.rels',
+      `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="${PKG}">` +
+      `<Relationship Id="rId1" Type="${DOC}/officeDocument" Target="xl/workbook.xml"/>` +
+      `</Relationships>`],
+    ['xl/workbook.xml',
+      `<?xml version="1.0" encoding="UTF-8"?>` +
+      `<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="${DOC}">` +
+      `<sheets><sheet name="Orçamento" sheetId="1" r:id="rId1"/></sheets></workbook>`],
+    ['xl/_rels/workbook.xml.rels',
+      `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="${PKG}">` +
+      `<Relationship Id="rId1" Type="${DOC}/worksheet" Target="worksheets/sheet1.xml"/>` +
+      `<Relationship Id="rId2" Type="${DOC}/styles"    Target="styles.xml"/>` +
+      `</Relationships>`],
+    ['xl/styles.xml',
+      `<?xml version="1.0" encoding="UTF-8"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">` +
+      `<numFmts><numFmt numFmtId="164" formatCode="&quot;R$ &quot;#,##0.00"/></numFmts>` +
+      `<fonts count="3">` +
+      `<font><sz val="11"/><name val="Calibri"/></font>` +
+      `<font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font>` +
+      `<font><b/><sz val="11"/><name val="Calibri"/></font>` +
+      `</fonts>` +
+      `<fills count="3">` +
+      `<fill><patternFill patternType="none"/></fill>` +
+      `<fill><patternFill patternType="gray125"/></fill>` +
+      `<fill><patternFill patternType="solid"><fgColor rgb="FFFF6633"/></patternFill></fill>` +
+      `</fills>` +
+      `<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>` +
+      `<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>` +
+      `<cellXfs count="4">` +
+      `<xf numFmtId="0"   fontId="0" fillId="0" borderId="0" xfId="0"/>` +
+      `<xf numFmtId="0"   fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"><alignment horizontal="center" wrapText="1"/></xf>` +
+      `<xf numFmtId="0"   fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/>` +
+      `<xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>` +
+      `</cellXfs></styleSheet>`],
     ['xl/worksheets/sheet1.xml', sheetXml],
-  ]);
+    ...mediaFiles,
+    ...(hasDrawing ? [
+      ['xl/drawings/drawing1.xml', drawingXml],
+      ['xl/drawings/_rels/drawing1.xml.rels',
+        `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="${PKG}">` +
+        drawingRelEntries.join('') +
+        `</Relationships>`],
+      ['xl/worksheets/_rels/sheet1.xml.rels',
+        `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="${PKG}">` +
+        `<Relationship Id="rId1" Type="${DOC}/drawing" Target="../drawings/drawing1.xml"/>` +
+        `</Relationships>`],
+    ] : []),
+  ];
+
+  return zip(files);
 }
