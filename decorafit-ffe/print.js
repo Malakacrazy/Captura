@@ -47,7 +47,7 @@ async function triggerPrint() {
 const CATS = [
   { id: 'revestimentos',     label: 'Revestimentos' },
   { id: 'loucas-metais',     label: 'Louças e Metais' },
-  { id: 'iluminacao',        label: 'Iluminação' },
+  { id: 'iluminacao',        label: 'Iluminação e Elétrica' },
   { id: 'eletros',           label: 'Eletros' },
   { id: 'moveis',            label: 'Móveis' },
   { id: 'decoracao-enxoval', label: 'Decoração e Enxoval' },
@@ -141,7 +141,7 @@ async function render() {
     // Column headings for the product table
     const tableHeader = document.createElement('div');
     tableHeader.className = 'table-header';
-    tableHeader.innerHTML = '<div></div><div>Produto</div><div style="text-align:center">Qtd</div><div style="text-align:right">Preço Unit.</div><div style="text-align:right">Subtotal</div>';
+    tableHeader.innerHTML = '<div></div><div>Produto</div><div>Ambiente</div><div>Observações</div><div style="text-align:center">Qtd</div><div style="text-align:right">Subtotal</div>';
 
     section.append(catHeader, tableHeader);
 
@@ -237,17 +237,23 @@ function buildProductRow(p, idx) {
   // Columns C, D, E — qty, unit price, subtotal
   const qtyCell = document.createElement('div');
   qtyCell.className = 'col-center';
-  qtyCell.textContent = p.qty || 1;
+  qtyCell.textContent = (p.qty || 1) + (p.unit ? ' ' + p.unit : '');
 
-  const unitCell = document.createElement('div');
-  unitCell.className = 'col-right';
-  unitCell.textContent = fmt(p.price || 0);
+  const ambCell = document.createElement('div');
+  ambCell.className = 'col-left';
+  ambCell.style.fontSize = '11px';
+  ambCell.textContent = p.ambiente || '';
+
+  const obsCell = document.createElement('div');
+  obsCell.className = 'col-left';
+  obsCell.style.fontSize = '11px';
+  obsCell.textContent = p.obs || '';
 
   const totalCell = document.createElement('div');
   totalCell.className = 'col-total';
   totalCell.textContent = fmt((p.price || 0) * (p.qty || 1));
 
-  row.append(imgCell, infoCell, qtyCell, unitCell, totalCell);
+  row.append(imgCell, infoCell, ambCell, obsCell, qtyCell, totalCell);
   return row;
 }
 
@@ -406,63 +412,59 @@ function buildXLSX(products, projectName) {
   const CATS_LABELS = {
     'revestimentos':     'Revestimentos',
     'loucas-metais':     'Louças e Metais',
-    'iluminacao':        'Iluminação',
+    'iluminacao':        'Iluminação e Elétrica',
     'eletros':           'Eletros',
     'moveis':            'Móveis',
     'decoracao-enxoval': 'Decoração e Enxoval',
     'outros':            'Outros'
   };
 
-  // ── Row & style data model ───────────────────────────────────────────────────
-  // Each cell is represented as {v, t, s}:
-  //   v — value (string, number, or formula string)
-  //   t — type: 's'=inline string, 'n'=number, 'f'=formula
-  //   s — style index (into cellXfs in styles.xml)
-  //
-  // Style index reference (defined in styles.xml below):
-  //   0  default / no style
-  //   1  column header  — orange fill, white bold, centered, word-wrap
-  //   2  bold black     — subtotal labels (legacy, now replaced by 13)
-  //   3  currency R$    — (legacy, now replaced by 9/10/14)
-  //   4  URL wrap       — (legacy, now replaced by 11/12)
-  //   5  brand header   — orange fill, 18pt white bold, centred (row 1)
-  //   6  project name   — light-orange fill, bold, centred (row 2)
-  //   7  data cell even — white bg, thin bottom border
-  //   8  data cell odd  — alt-colour bg (#F5F0EE), thin bottom border
-  //   9  number even    — R$ format, white bg, thin bottom border
-  //  10  number odd     — R$ format, alt bg, thin bottom border
-  //  11  URL even       — wrap+top, white bg, thin bottom border
-  //  12  URL odd        — wrap+top, alt bg, thin bottom border
-  //  13  subtotal label — bold, medium orange bottom border
-  //  14  subtotal value — bold, R$ format, medium orange bottom border
-  //  15  qty even       — integer format (no decimals), white bg, thin border
-  //  16  qty odd        — integer format, alt bg, thin border
+  // Category → style index map for colored header rows
+  const CAT_STYLES = {
+    'revestimentos':22, 'loucas-metais':23, 'iluminacao':24, 'eletros':25,
+    'moveis':26, 'decoracao-enxoval':27, 'outros':28
+  };
+
   const cv = (v, t, s) => ({v, t, s});
   const rows = [];
 
-  // Track special row indices so the XML writer can apply the right behaviour:
-  //   imgRows  — product rows that contain an IMAGE() formula → taller row height
-  //   dataEven — even-numbered product rows → emit all 9 columns (for full-width border)
-  //   dataOdd  — odd-numbered product rows  → same, but with alt background
-  //   subRows  — subtotal and grand-total rows → emit all 9 columns
-  const imgRows  = new Set();
-  const dataEven = new Set();
-  const dataOdd  = new Set();
-  const subRows  = new Set();
+  const imgRows      = new Set();
+  const dataEven     = new Set();
+  const dataOdd      = new Set();
+  const subRows      = new Set();
+  const catHeaderRows = new Set();
+  const merges = [];
 
-  // ── Header rows (rows 1–2, merged A:I) ──────────────────────────────────────
-  rows.push([cv('DECORAFIT', 's', 5)]);       // row 1 — brand name, large orange header
-  rows.push([cv(projectName, 's', 6)]);       // row 2 — project name, light-orange bar
-  rows.push([]);                              // row 3 — blank spacer
-  rows.push([                                // row 4 — column headings
-    cv('Imagem','s',1), cv('Categoria','s',1), cv('Produto','s',1),
-    cv('Marca','s',1), cv('SKU','s',1), cv('Qtd','s',1),
-    cv('Preço Unit. (R$)','s',1), cv('Subtotal (R$)','s',1), cv('URL','s',1)
+  // Row 1 — brand header (orange)
+  merges.push(`A1:I1`);
+  rows.push([cv('DECORAFIT', 's', 5)]);
+
+  // Row 2 — doc type (dark blue)
+  merges.push(`A2:I2`);
+  rows.push([cv('SUGESTÃO DE ACABAMENTOS', 's', 17)]);
+
+  // Row 3 — project name (light orange)
+  merges.push(`A3:I3`);
+  rows.push([cv(projectName || 'Orçamento', 's', 6)]);
+
+  // Row 4 — blank
+  rows.push([]);
+
+  // Row 5 — summary cards
+  const totalUnits = products.reduce((s, p) => s + (p.qty || 1), 0);
+  const grandTotalVal = products.reduce((s, p) => s + (p.price || 0) * (p.qty || 1), 0);
+  rows.push([
+    cv('Produtos', 's', 18), cv(products.length, 'n', 19), cv('', 's', 18),
+    cv('Unidades', 's', 18), cv(totalUnits, 'n', 19), cv('', 's', 18),
+    cv('Total do Orçamento', 's', 20), cv(grandTotalVal, 'n', 21), cv('', 's', 20)
   ]);
 
-  // ── Product rows, grouped by category ────────────────────────────────────────
+  // Row 6 — blank
+  rows.push([]);
+
+  // Product rows grouped by category — mirrors PDF sections
   let grandTotal = 0;
-  let pCounter = 0; // global counter across all categories, drives even/odd alternation
+  let pCounter = 0;
 
   for (const [catId, catLabel] of Object.entries(CATS_LABELS)) {
     const items = products
@@ -470,45 +472,54 @@ function buildXLSX(products, projectName) {
       .filter(({p}) => (p.category || 'outros') === catId);
     if (!items.length) continue;
 
+    // Category header row (colored, merged A:I)
+    const catRowIdx = rows.length;
+    catHeaderRows.add(catRowIdx);
+    const catStyle = CAT_STYLES[catId] || 28;
+    const cnt = items.length;
+    merges.push(`A${catRowIdx+1}:I${catRowIdx+1}`);
+    rows.push([cv(`${catLabel}  —  ${cnt} ${cnt === 1 ? 'item' : 'itens'}`, 's', catStyle)]);
+
+    // Column headers (dark blue)
+    rows.push([
+      cv('','s',1), cv('Produto','s',1), cv('Marca','s',1),
+      cv('Ambiente','s',1), cv('Observações','s',1), cv('Qtd','s',1),
+      cv('Un.','s',1), cv('Subtotal','s',1), cv('URL','s',1)
+    ]);
+
     let catTotal = 0;
 
     for (const {p} of items) {
-      const rowIdx = rows.length; // 0-based index of this row in the rows array
+      const rowIdx = rows.length;
       const odd = pCounter % 2 === 1;
       pCounter++;
 
-      // Register this row in the appropriate Sets for the sheet XML writer
       if (p.img) imgRows.add(rowIdx);
       if (odd) dataOdd.add(rowIdx); else dataEven.add(rowIdx);
 
-      // Choose the correct style variant for this row's parity
-      const ds = odd ? 8  : 7;  // plain text cells
-      const ns = odd ? 10 : 9;  // numeric / currency cells
-      const us = odd ? 12 : 11; // URL cells (wrap text)
-      const qs = odd ? 16 : 15; // quantity cells (integer, no decimal)
+      const ds = odd ? 8  : 7;
+      const ns = odd ? 10 : 9;
+      const us = odd ? 12 : 11;
+      const qs = odd ? 16 : 15;
 
       const sub = (p.price || 0) * (p.qty || 1);
       catTotal += sub;
 
-      // Column A: IMAGE() formula if an image URL was captured; blank cell otherwise.
-      // =IMAGE("url") is an Excel 365 / Microsoft 365 function that fetches and
-      // displays the image directly inside the cell — no drawing XML needed.
       rows.push([
         p.img ? cv(`IMAGE("${p.img}")`, 'f', ds) : cv('', 's', ds),
-        cv(catLabel,    's', ds),
-        cv(p.name||'',  's', ds),
-        cv(p.brand||'', 's', ds),
-        cv(p.sku||'',   's', ds),
-        cv(p.qty||1,    'n', qs),
-        cv(p.price||0,  'n', ns),
-        cv(sub,         'n', ns),
-        cv(p.url||'',   's', us)
+        cv(p.name||'',     's', ds),
+        cv(p.brand||'',    's', ds),
+        cv(p.ambiente||'', 's', ds),
+        cv(p.obs||'',      's', ds),
+        cv(p.qty||1,       'n', qs),
+        cv(p.unit||'',     's', ds),
+        cv(sub,            'n', ns),
+        cv(p.url||'',      's', us)
       ]);
     }
 
     grandTotal += catTotal;
 
-    // Subtotal row for this category (columns G–H have values; A–F carry the border style)
     const subIdx = rows.length;
     subRows.add(subIdx);
     rows.push([null,null,null,null,null,null,
@@ -516,10 +527,9 @@ function buildXLSX(products, projectName) {
       cv(catTotal,    'n', 14)
     ]);
 
-    rows.push([]); // blank spacer between categories
+    rows.push([]);
   }
 
-  // Grand total row (same structure as category subtotals)
   const totalIdx = rows.length;
   subRows.add(totalIdx);
   rows.push([null,null,null,null,null,null,
@@ -535,37 +545,35 @@ function buildXLSX(products, projectName) {
   // Rows 0 and 1 (brand + project name) have fixed heights in points.
   // All other rows use the default height, except product image rows (ht=60).
   const fixedHeights = {
-    0: ' ht="40" customHeight="1"', // brand header row
-    1: ' ht="22" customHeight="1"'  // project name row
+    0: ' ht="40" customHeight="1"',
+    1: ' ht="26" customHeight="1"',
+    2: ' ht="22" customHeight="1"'
   };
 
   let sheetXml =
     `<?xml version="1.0" encoding="UTF-8"?>` +
     `<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">` +
-    // Hide gridlines for a cleaner look; borders defined in styles provide structure instead
     `<sheetViews><sheetView showGridLines="0" workbookViewId="0"/></sheetViews>` +
-    // Column widths (Excel "character" units, ~1 unit ≈ 0.75 cm at default zoom)
     `<cols>` +
-    `<col min="1" max="1" width="18" customWidth="1"/>` + // A — image (~13.5 cm)
-    `<col min="2" max="2" width="18" customWidth="1"/>` + // B — category
-    `<col min="3" max="3" width="40" customWidth="1"/>` + // C — product name
-    `<col min="4" max="4" width="15" customWidth="1"/>` + // D — brand
-    `<col min="5" max="5" width="15" customWidth="1"/>` + // E — SKU
-    `<col min="6" max="6" width="6"  customWidth="1"/>` + // F — qty
-    `<col min="7" max="7" width="18" customWidth="1"/>` + // G — unit price
-    `<col min="8" max="8" width="18" customWidth="1"/>` + // H — subtotal
-    `<col min="9" max="9" width="45" customWidth="1"/>` + // I — URL
+    `<col min="1" max="1" width="16" customWidth="1"/>` +
+    `<col min="2" max="2" width="38" customWidth="1"/>` +
+    `<col min="3" max="3" width="14" customWidth="1"/>` +
+    `<col min="4" max="4" width="14" customWidth="1"/>` +
+    `<col min="5" max="5" width="22" customWidth="1"/>` +
+    `<col min="6" max="6" width="6"  customWidth="1"/>` +
+    `<col min="7" max="7" width="8"  customWidth="1"/>` +
+    `<col min="8" max="8" width="16" customWidth="1"/>` +
+    `<col min="9" max="9" width="38" customWidth="1"/>` +
     `</cols><sheetData>`;
 
   rows.forEach((row, ri) => {
     // Determine row height: fixed for the two header rows, tall for image rows, default otherwise
-    const tall = fixedHeights[ri] ?? (imgRows.has(ri) ? ' ht="60" customHeight="1"' : '');
+    const isCatHdr = catHeaderRows.has(ri);
+    const tall = fixedHeights[ri] ?? (imgRows.has(ri) ? ' ht="60" customHeight="1"' : (isCatHdr ? ' ht="24" customHeight="1"' : ''));
 
     const isData = dataEven.has(ri) || dataOdd.has(ri);
     const isSub  = subRows.has(ri);
 
-    // Data and subtotal rows must emit all 9 columns even when some cells are empty,
-    // so that the bottom border style spans the full row width visually.
     const numCols = (isData || isSub) ? 9 : row.length;
 
     if (!numCols) { sheetXml += `<row r="${ri+1}"${tall}/>`; return; }
@@ -601,14 +609,10 @@ function buildXLSX(products, projectName) {
     sheetXml += `</row>`;
   });
 
-  // Close sheetData; declare merged cells for the two header rows (A1:I1 and A2:I2)
-  sheetXml +=
-    `</sheetData>` +
-    `<mergeCells count="2">` +
-      `<mergeCell ref="A1:I1"/>` + // brand "DECORAFIT" spans full width
-      `<mergeCell ref="A2:I2"/>` + // project name spans full width
-    `</mergeCells>` +
-    `</worksheet>`;
+  sheetXml += `</sheetData>` +
+    `<mergeCells count="${merges.length}">` +
+    merges.map(m => `<mergeCell ref="${m}"/>`).join('') +
+    `</mergeCells></worksheet>`;
 
   // ── OOXML namespace constants ────────────────────────────────────────────────
   const CT  = `http://schemas.openxmlformats.org/package/2006/content-types`;
@@ -653,88 +657,64 @@ function buildXLSX(products, projectName) {
     // them by index through cellXfs (cell format) records.
     ['xl/styles.xml',
       `<?xml version="1.0" encoding="UTF-8"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">` +
-
-      // Custom number format 164: Brazilian currency "R$ 1.234,56"
-      // IDs 0–163 are built-in Excel formats; custom formats must start at 164.
       `<numFmts><numFmt numFmtId="164" formatCode="&quot;R$ &quot;#,##0.00"/></numFmts>` +
-
-      // Fonts (referenced by index in cellXfs):
-      //   0 — Calibri 11 normal    (body text)
-      //   1 — Calibri 11 bold white (column headers, orange background)
-      //   2 — Calibri 11 bold black (subtotal / total labels)
-      //   3 — Calibri 18 bold white (brand header row)
       `<fonts count="4">` +
       `<font><sz val="11"/><name val="Calibri"/></font>` +
       `<font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font>` +
       `<font><b/><sz val="11"/><name val="Calibri"/></font>` +
       `<font><b/><sz val="18"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font>` +
       `</fonts>` +
-
-      // Fills (first two are required boilerplate by the spec):
-      //   0 — none         (required placeholder)
-      //   1 — gray125      (required placeholder)
-      //   2 — #FF6633      (Decorafit orange — column headers, brand header)
-      //   3 — #FFF0E8      (light orange — project name row)
-      //   4 — #F5F0EE      (very light warm tint — alternating product rows)
-      `<fills count="5">` +
+      `<fills count="13">` +
       `<fill><patternFill patternType="none"/></fill>` +
       `<fill><patternFill patternType="gray125"/></fill>` +
       `<fill><patternFill patternType="solid"><fgColor rgb="FFFF6633"/></patternFill></fill>` +
       `<fill><patternFill patternType="solid"><fgColor rgb="FFFFF0E8"/></patternFill></fill>` +
       `<fill><patternFill patternType="solid"><fgColor rgb="FFF5F0EE"/></patternFill></fill>` +
+      `<fill><patternFill patternType="solid"><fgColor rgb="FF181F39"/></patternFill></fill>` +
+      `<fill><patternFill patternType="solid"><fgColor rgb="FFCC4E1A"/></patternFill></fill>` +
+      `<fill><patternFill patternType="solid"><fgColor rgb="FF5E6979"/></patternFill></fill>` +
+      `<fill><patternFill patternType="solid"><fgColor rgb="FFAA9C79"/></patternFill></fill>` +
+      `<fill><patternFill patternType="solid"><fgColor rgb="FF607080"/></patternFill></fill>` +
+      `<fill><patternFill patternType="solid"><fgColor rgb="FF8D6E63"/></patternFill></fill>` +
+      `<fill><patternFill patternType="solid"><fgColor rgb="FF8E9A6A"/></patternFill></fill>` +
+      `<fill><patternFill patternType="solid"><fgColor rgb="FF9AA09A"/></patternFill></fill>` +
       `</fills>` +
-
-      // Borders:
-      //   0 — no borders                (header rows, default cells)
-      //   1 — thin bottom #D0D0D0       (data rows — subtle separator)
-      //   2 — medium bottom #FF6633     (subtotal / grand total rows — branded accent)
       `<borders count="3">` +
       `<border><left/><right/><top/><bottom/><diagonal/></border>` +
-      `<border><left/><right/><top/><bottom style="thin"  ><color rgb="FFD0D0D0"/></bottom><diagonal/></border>` +
+      `<border><left/><right/><top/><bottom style="thin"><color rgb="FFD0D0D0"/></bottom><diagonal/></border>` +
       `<border><left/><right/><top/><bottom style="medium"><color rgb="FFFF6633"/></bottom><diagonal/></border>` +
       `</borders>` +
-
-      // cellStyleXfs: one required base record (xfId="0" used by all cellXfs)
       `<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>` +
-
-      // cellXfs: the 17 named style combinations used throughout the sheet.
-      // Each <xf> combines a font, fill, border, and number format by index.
-      // The applyXxx attributes are required by strict OOXML readers.
-      `<cellXfs count="17">` +
-      // 0 — default: no formatting
+      `<cellXfs count="29">` +
       `<xf numFmtId="0"   fontId="0" fillId="0" borderId="0" xfId="0"/>` +
-      // 1 — column header: orange bg, white bold, centred, word-wrap, thin border below
-      `<xf numFmtId="0"   fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"><alignment horizontal="center" wrapText="1"/></xf>` +
-      // 2 — bold black (legacy, kept for index stability)
+      `<xf numFmtId="0"   fontId="1" fillId="5" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"><alignment horizontal="center" wrapText="1"/></xf>` +
       `<xf numFmtId="0"   fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/>` +
-      // 3 — R$ currency, no border (legacy)
       `<xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>` +
-      // 4 — URL wrap, no border (legacy)
       `<xf numFmtId="0"   fontId="0" fillId="0" borderId="0" xfId="0"><alignment wrapText="1" vertical="top"/></xf>` +
-      // 5 — brand header: large 18pt bold white on orange, centred
       `<xf numFmtId="0"   fontId="3" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"><alignment horizontal="center" vertical="center"/></xf>` +
-      // 6 — project name row: bold black on light orange, centred
       `<xf numFmtId="0"   fontId="2" fillId="3" borderId="0" xfId="0" applyFont="1" applyFill="1"><alignment horizontal="center" vertical="center"/></xf>` +
-      // 7 — data cell, even row: white bg, thin bottom border
       `<xf numFmtId="0"   fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1"/>` +
-      // 8 — data cell, odd row: alt bg, thin bottom border
       `<xf numFmtId="0"   fontId="0" fillId="4" borderId="1" xfId="0" applyFill="1" applyBorder="1"/>` +
-      // 9 — number/currency, even row
       `<xf numFmtId="164" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1"/>` +
-      // 10 — number/currency, odd row
       `<xf numFmtId="164" fontId="0" fillId="4" borderId="1" xfId="0" applyNumberFormat="1" applyFill="1" applyBorder="1"/>` +
-      // 11 — URL cell, even row: wrap text, align top
       `<xf numFmtId="0"   fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1"><alignment wrapText="1" vertical="top"/></xf>` +
-      // 12 — URL cell, odd row
       `<xf numFmtId="0"   fontId="0" fillId="4" borderId="1" xfId="0" applyFill="1" applyBorder="1"><alignment wrapText="1" vertical="top"/></xf>` +
-      // 13 — subtotal label: bold black, medium orange bottom border
       `<xf numFmtId="0"   fontId="2" fillId="0" borderId="2" xfId="0" applyFont="1" applyBorder="1"/>` +
-      // 14 — subtotal value: bold, R$ format, medium orange bottom border
       `<xf numFmtId="164" fontId="2" fillId="0" borderId="2" xfId="0" applyFont="1" applyNumberFormat="1" applyBorder="1"/>` +
-      // 15 — qty, even row: integer format (numFmtId=1 = "0"), no decimals
       `<xf numFmtId="1"   fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1"/>` +
-      // 16 — qty, odd row
       `<xf numFmtId="1"   fontId="0" fillId="4" borderId="1" xfId="0" applyNumberFormat="1" applyFill="1" applyBorder="1"/>` +
+      `<xf numFmtId="0"   fontId="1" fillId="5" borderId="0" xfId="0" applyFont="1" applyFill="1"><alignment horizontal="center" vertical="center"/></xf>` +
+      `<xf numFmtId="0"   fontId="0" fillId="3" borderId="0" xfId="0" applyFill="1"><alignment vertical="center"/></xf>` +
+      `<xf numFmtId="0"   fontId="2" fillId="3" borderId="0" xfId="0" applyFont="1" applyFill="1"><alignment horizontal="center" vertical="center"/></xf>` +
+      `<xf numFmtId="0"   fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"><alignment vertical="center"/></xf>` +
+      `<xf numFmtId="164" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1" applyNumberFormat="1"><alignment vertical="center"/></xf>` +
+      `<xf numFmtId="0"   fontId="1" fillId="6" borderId="0" xfId="0" applyFont="1" applyFill="1"><alignment vertical="center"/></xf>` +
+      `<xf numFmtId="0"   fontId="1" fillId="7" borderId="0" xfId="0" applyFont="1" applyFill="1"><alignment vertical="center"/></xf>` +
+      `<xf numFmtId="0"   fontId="1" fillId="8" borderId="0" xfId="0" applyFont="1" applyFill="1"><alignment vertical="center"/></xf>` +
+      `<xf numFmtId="0"   fontId="1" fillId="9" borderId="0" xfId="0" applyFont="1" applyFill="1"><alignment vertical="center"/></xf>` +
+      `<xf numFmtId="0"   fontId="1" fillId="10" borderId="0" xfId="0" applyFont="1" applyFill="1"><alignment vertical="center"/></xf>` +
+      `<xf numFmtId="0"   fontId="1" fillId="11" borderId="0" xfId="0" applyFont="1" applyFill="1"><alignment vertical="center"/></xf>` +
+      `<xf numFmtId="0"   fontId="1" fillId="12" borderId="0" xfId="0" applyFont="1" applyFill="1"><alignment vertical="center"/></xf>` +
       `</cellXfs></styleSheet>`],
 
     // xl/worksheets/sheet1.xml — the sheet data built above

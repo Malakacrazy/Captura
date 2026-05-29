@@ -89,14 +89,14 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   // Mirrors openPrint but targets library.html — the saved-projects browser.
   // The same async-channel contract applies, so we return true here too.
   if (msg.action === 'openLibrary') {
-
-    // Resolve the extension-internal URL for the library page.
     const url = chrome.runtime.getURL('library.html');
-
-    // Open the page and report success + tab id back to the caller.
     chrome.tabs.create({ url }, tab => sendResponse({ ok: true, tabId: tab.id }));
+    return true;
+  }
 
-    // Keep the message channel open until the tabs.create callback fires.
+  if (msg.action === 'openPopup') {
+    const url = chrome.runtime.getURL('popup.html');
+    chrome.tabs.create({ url }, tab => sendResponse({ ok: true, tabId: tab.id }));
     return true;
   }
 });

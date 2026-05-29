@@ -133,14 +133,180 @@ function buildCard(proj) {
   delBtn.textContent = '✕';
   delBtn.title       = 'Excluir projeto';
 
-  actions.append(loadBtn, delBtn);
+  const expandBtn = document.createElement('button');
+  expandBtn.className   = 'act-btn expand';
+  expandBtn.textContent = '▼ Ver itens';
+
+  const shareBtn = document.createElement('button');
+  shareBtn.className   = 'act-btn';
+  shareBtn.textContent = '📋 Compartilhar';
+  shareBtn.title       = 'Copiar projeto para área de transferência';
+  shareBtn.addEventListener('click', () => shareProject(proj));
+
+  actions.append(expandBtn, shareBtn, loadBtn, delBtn);
+
+  const cardWrap = document.createElement('div');
+  cardWrap.style.cssText = 'margin-bottom:10px';
+
+  card.style.marginBottom = '0';
   card.append(icon, info, totalEl, actions);
+  cardWrap.appendChild(card);
 
   loadBtn.addEventListener('click', () => loadProject(proj));
   delBtn.addEventListener('click',  () => deleteProject(proj.id));
   editBtn.addEventListener('click', () => startRename(card, proj, nameEl, editBtn));
 
-  return card;
+  let itemsPanel = null;
+  expandBtn.addEventListener('click', () => {
+    if (itemsPanel) {
+      itemsPanel.remove();
+      itemsPanel = null;
+      expandBtn.textContent = '▼ Ver itens';
+      return;
+    }
+    itemsPanel = buildItemsPanel(proj);
+    cardWrap.appendChild(itemsPanel);
+    expandBtn.textContent = '▲ Ocultar';
+  });
+
+  return cardWrap;
+}
+
+// ─── Ambientes ────────────────────────────────────────────────────────────────
+
+const AMBIENTES = ['', 'Cozinha', 'Lavanderia', 'Banheiros', 'Dormitórios', 'Terraço', 'Sala'];
+
+// ─── Items panel ──────────────────────────────────────────────────────────────
+
+function buildItemsPanel(proj) {
+  const panel = document.createElement('div');
+  panel.className = 'items-panel';
+
+  const items = proj.products || [];
+  if (items.length === 0) {
+    panel.innerHTML = '<div style="padding:16px;text-align:center;color:#7A6A60;font-size:12px">Nenhum item neste projeto.</div>';
+    return panel;
+  }
+
+  const table = document.createElement('table');
+  table.className = 'items-table';
+
+  const thead = document.createElement('thead');
+  thead.innerHTML = '<tr><th></th><th>Produto</th><th>Un.</th><th>Ambiente</th><th>Observações</th><th>Qtd</th><th>Subtotal</th></tr>';
+  table.appendChild(thead);
+
+  const tbody = document.createElement('tbody');
+
+  items.forEach((p, idx) => {
+    const tr = document.createElement('tr');
+
+    // Image
+    const tdImg = document.createElement('td');
+    if (p.img) {
+      const img = document.createElement('img');
+      img.className = 'item-img';
+      img.src = p.img;
+      img.alt = p.name || '';
+      img.addEventListener('error', () => {
+        const ph = document.createElement('div');
+        ph.className = 'item-img-ph';
+        ph.textContent = '📦';
+        img.replaceWith(ph);
+      });
+      tdImg.appendChild(img);
+    } else {
+      const ph = document.createElement('div');
+      ph.className = 'item-img-ph';
+      ph.textContent = '📦';
+      tdImg.appendChild(ph);
+    }
+
+    // Name (editable)
+    const tdName = document.createElement('td');
+    const nameInput = document.createElement('input');
+    nameInput.type = 'text';
+    nameInput.value = p.name || '';
+    nameInput.addEventListener('change', () => {
+      p.name = nameInput.value.trim() || p.name;
+      saveProjectsToStorage();
+      syncIfActive(proj);
+    });
+    tdName.appendChild(nameInput);
+
+    // Unit (dropdown)
+    const tdUnit = document.createElement('td');
+    const unitSelect = document.createElement('select');
+    const UNITS = ['', 'un', 'm²', 'cx', 'metro', 'barra'];
+    UNITS.forEach(u => {
+      const opt = document.createElement('option');
+      opt.value = u;
+      opt.textContent = u || '— Un. —';
+      if ((p.unit || '') === u) opt.selected = true;
+      unitSelect.appendChild(opt);
+    });
+    unitSelect.style.width = '70px';
+    unitSelect.addEventListener('change', () => {
+      p.unit = unitSelect.value;
+      saveProjectsToStorage();
+      syncIfActive(proj);
+    });
+    tdUnit.appendChild(unitSelect);
+
+    // Ambiente (dropdown)
+    const tdAmb = document.createElement('td');
+    const ambSelect = document.createElement('select');
+    AMBIENTES.forEach(a => {
+      const opt = document.createElement('option');
+      opt.value = a;
+      opt.textContent = a || '— Selecione —';
+      if ((p.ambiente || '') === a) opt.selected = true;
+      ambSelect.appendChild(opt);
+    });
+    ambSelect.addEventListener('change', () => {
+      p.ambiente = ambSelect.value;
+      saveProjectsToStorage();
+      syncIfActive(proj);
+    });
+    tdAmb.appendChild(ambSelect);
+
+    // Observações (editable)
+    const tdObs = document.createElement('td');
+    const obsInput = document.createElement('input');
+    obsInput.type = 'text';
+    obsInput.value = p.obs || '';
+    obsInput.placeholder = 'Adicionar...';
+    obsInput.addEventListener('change', () => {
+      p.obs = obsInput.value.trim();
+      saveProjectsToStorage();
+      syncIfActive(proj);
+    });
+    tdObs.appendChild(obsInput);
+
+    // Qty
+    const tdQty = document.createElement('td');
+    tdQty.className = 'col-qty';
+    tdQty.textContent = p.qty || 1;
+
+    // Subtotal
+    const tdTotal = document.createElement('td');
+    tdTotal.className = 'col-total';
+    tdTotal.textContent = fmt((p.price || 0) * (p.qty || 1));
+
+    tr.append(tdImg, tdName, tdUnit, tdAmb, tdObs, tdQty, tdTotal);
+    tbody.appendChild(tr);
+  });
+
+  table.appendChild(tbody);
+  panel.appendChild(table);
+  return panel;
+}
+
+// If the edited project is the one currently loaded, sync changes to live storage
+function syncIfActive(proj) {
+  if (proj.id === currentProjectId) {
+    currentProducts = proj.products || [];
+    chrome.storage.local.set({ products: currentProducts });
+  }
 }
 
 // ─── Inline rename ────────────────────────────────────────────────────────────
@@ -286,6 +452,68 @@ $('updateBtn').addEventListener('click', async () => {
 // ─── Back ─────────────────────────────────────────────────────────────────────
 
 $('backBtn').addEventListener('click', () => window.close());
+
+$('exportBtn').addEventListener('click', () => {
+  chrome.runtime.sendMessage({ action: 'openPrint' });
+});
+
+$('exportXlsxBtn').addEventListener('click', () => {
+  chrome.runtime.sendMessage({ action: 'openPrint' });
+  showToast('Abra a página de exportação e clique em "Salvar Excel"');
+});
+
+// ─── Share / Import ───────────────────────────────────────────────────────
+
+async function shareProject(proj) {
+  const payload = {
+    _decorafit: 1,
+    name: proj.name,
+    savedAt: proj.savedAt,
+    products: proj.products || []
+  };
+  try {
+    await navigator.clipboard.writeText(JSON.stringify(payload));
+    showToast('✓ Projeto copiado! Cole e envie para o outro usuário.');
+  } catch (e) {
+    showToast('⚠ Não foi possível copiar. Verifique as permissões do navegador.');
+  }
+}
+
+$('importBtn').addEventListener('click', async () => {
+  let text;
+  try {
+    text = await navigator.clipboard.readText();
+  } catch (e) {
+    showToast('⚠ Não foi possível ler a área de transferência.');
+    return;
+  }
+
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch (e) {
+    showToast('⚠ O conteúdo copiado não é um projeto válido.');
+    return;
+  }
+
+  if (!data._decorafit || !Array.isArray(data.products)) {
+    showToast('⚠ O conteúdo copiado não é um projeto Decorafit.');
+    return;
+  }
+
+  const name = data.name || `Projeto importado ${new Intl.DateTimeFormat('pt-BR').format(new Date())}`;
+  const proj = {
+    id: Date.now(),
+    name,
+    savedAt: new Date().toISOString(),
+    products: data.products
+  };
+
+  projects.push(proj);
+  await saveProjectsToStorage();
+  renderProjects();
+  showToast(`✓ "${name}" importado com sucesso!`);
+});
 
 // ─── Storage helper ───────────────────────────────────────────────────────────
 

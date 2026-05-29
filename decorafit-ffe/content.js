@@ -30,7 +30,37 @@
   const toast = document.createElement('div');
   toast.id = 'sa-toast';
 
-  document.body.append(fab, toast);
+  const fabLib = document.createElement('button');
+  fabLib.id = 'sa-fab-lib';
+  fabLib.setAttribute('aria-label', 'Abrir Projeto Decorafit');
+  fabLib.innerHTML = `
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+    </svg>
+    <span>Abrir Projeto</span>
+  `;
+  let popupFrame = null;
+  fabLib.addEventListener('click', () => {
+    if (popupFrame) {
+      popupFrame.remove();
+      popupFrame = null;
+      return;
+    }
+    popupFrame = document.createElement('iframe');
+    popupFrame.id = 'sa-popup-frame';
+    popupFrame.src = chrome.runtime.getURL('popup.html');
+    document.body.appendChild(popupFrame);
+    const close = (e) => {
+      if (popupFrame && !popupFrame.contains(e.target) && e.target !== fabLib && !fabLib.contains(e.target)) {
+        popupFrame.remove();
+        popupFrame = null;
+        document.removeEventListener('click', close);
+      }
+    };
+    setTimeout(() => document.addEventListener('click', close), 100);
+  });
+
+  document.body.append(fab, fabLib, toast);
 
   // ─── Click handler ────────────────────────────────────────────────────────
 
@@ -80,7 +110,8 @@
     const url      = window.location.href;
     const category = guessCategory(name);
 
-    return { id: Date.now(), name, brand, sku, price, img, dims: '', url, qty: 1, category };
+    const unit = getUnit();
+    return { id: Date.now(), name, brand, sku, price, img, dims: '', url, qty: 1, category, unit };
   }
 
   // ── JSON-LD helper ────────────────────────────────────────────────────────
@@ -347,6 +378,30 @@
       .sort((a, b) => b.area - a.area); // largest first
 
     return candidates[0]?.src || '';
+  }
+
+  // ─── Unit of measurement scraper ────────────────────────────────────────────
+  function getUnit() {
+    const body = document.body.innerText;
+    const patterns = [
+      /(?:vendido|venda|preço)\s+(?:por|p\/)\s*(m²|m2|m³|m3|ml|un|pç|peça|cx|caixa|kg|litro|rolo|par|jogo|conjunto|metro linear|metro quadrado|metro)/i,
+      /(?:unidade\s+de\s+medida|und\.?\s*medida|un\.?\s*med\.?)[:\s]*(m²|m2|m³|m3|ml|un|pç|peça|cx|caixa|kg|litro|rolo|par|jogo|conjunto|metro linear|metro quadrado|metro)/i,
+      /\b(\d+[.,]\d+)\s*(m²|m2)\b/i,
+    ];
+    for (const re of patterns) {
+      const m = body.match(re);
+      if (m) {
+        const raw = (m[1] || '').trim().toLowerCase();
+        const map = { 'm2': 'm²', 'm3': 'm³', 'metro quadrado': 'm²', 'metro linear': 'ml', 'peca': 'pç', 'caixa': 'cx', 'peça': 'pç' };
+        return map[raw] || raw || '';
+      }
+    }
+    const el = document.querySelector('[class*="unit"], [class*="unidade"], [data-unit]');
+    if (el?.innerText) {
+      const t = el.innerText.trim().toLowerCase();
+      if (t.length < 20) return t;
+    }
+    return '';
   }
 
   // ─── Category auto-detection ──────────────────────────────────────────────

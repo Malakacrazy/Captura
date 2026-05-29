@@ -23,6 +23,7 @@
 
     body {
       width: 420px;
+      max-width: 100%;
       background: var(--bg);
       color: var(--text);
       font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
@@ -151,7 +152,7 @@
     <button class="cat-tab active" data-cat="all">Todos</button>
     <button class="cat-tab" data-cat="revestimentos">Revestimentos</button>
     <button class="cat-tab" data-cat="loucas-metais">Louças &amp; Metais</button>
-    <button class="cat-tab" data-cat="iluminacao">Iluminação</button>
+    <button class="cat-tab" data-cat="iluminacao">Ilum. &amp; Elétrica</button>
     <button class="cat-tab" data-cat="eletros">Eletros</button>
     <button class="cat-tab" data-cat="moveis">Móveis</button>
     <button class="cat-tab" data-cat="decoracao-enxoval">Dec. &amp; Enxoval</button>
@@ -181,10 +182,18 @@
     <div class="form-row">
       <input class="form-input md" id="f-price" type="number" step="0.01" min="0" placeholder="R$ Preço"/>
       <input class="form-input sm" id="f-qty" type="number" min="1" value="1"/>
+      <select class="form-select" id="f-unit" style="flex:0 0 80px">
+        <option value="">Un.</option>
+        <option value="un">un</option>
+        <option value="m²">m²</option>
+        <option value="cx">cx</option>
+        <option value="metro">metro</option>
+        <option value="barra">barra</option>
+      </select>
       <select class="form-select" id="f-cat">
         <option value="revestimentos">Revestimentos</option>
         <option value="loucas-metais">Louças e Metais</option>
-        <option value="iluminacao">Iluminação</option>
+        <option value="iluminacao">Iluminação e Elétrica</option>
         <option value="eletros">Eletros</option>
         <option value="moveis">Móveis</option>
         <option value="decoracao-enxoval">Decoração e Enxoval</option>

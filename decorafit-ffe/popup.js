@@ -13,7 +13,7 @@ const $ = id => document.getElementById(id);
 const CATEGORIES = [
   { id: 'revestimentos',     label: 'Revestimentos' },
   { id: 'loucas-metais',     label: 'Louças e Metais' },
-  { id: 'iluminacao',        label: 'Iluminação' },
+  { id: 'iluminacao',        label: 'Iluminação e Elétrica' },
   { id: 'eletros',           label: 'Eletros' },
   { id: 'moveis',            label: 'Movéis' },
   { id: 'decoracao-enxoval', label: 'Decoração e Enxoval' },
@@ -292,12 +292,13 @@ $('addManualBtn').addEventListener('click', async () => {
   const qty      = Math.max(1, parseInt($('f-qty').value) || 1); // floor at 1
   const category = $('f-cat').value;
 
-  products.push({ id: Date.now(), name, brand, sku, price, qty, category, img: '', dims: '', url: '' });
+  const unit = $('f-unit').value.trim();
+  products.push({ id: Date.now(), name, brand, sku, price, qty, category, img: '', dims: '', url: '', unit });
   await save();
 
   // Clear the form fields for the next entry
   $('f-name').value  = ''; $('f-brand').value = ''; $('f-sku').value = '';
-  $('f-price').value = ''; $('f-qty').value   = '1';
+  $('f-price').value = ''; $('f-qty').value   = '1'; $('f-unit').value = '';
 
   showStatus('✓ Produto adicionado', 'ok');
 
@@ -350,7 +351,8 @@ $('captureBtn').addEventListener('click', async () => {
       category: cat,
       img:      d.img    || '',
       dims:     d.dims   || '',
-      url:      d.url    || ''
+      url:      d.url    || '',
+      unit:     d.unit   || ''
     });
 
     await save();
@@ -611,7 +613,23 @@ function extractProductFromPage() {
     return candidates[0]?.src || '';
   }
 
-  // Return the plain data object — executeScript serialises it back to the popup
+  function getUnit() {
+    const body = document.body.innerText;
+    const patterns = [
+      /(?:vendido|venda|preço)\s+(?:por|p\/)\s*(m²|m2|m³|m3|ml|un|pç|peça|cx|caixa|kg|litro|rolo|par|jogo|conjunto|metro linear|metro quadrado|metro)/i,
+      /(?:unidade\s+de\s+medida|und\.?\s*medida|un\.?\s*med\.?)[:\s]*(m²|m2|m³|m3|ml|un|pç|peça|cx|caixa|kg|litro|rolo|par|jogo|conjunto|metro linear|metro quadrado|metro)/i,
+    ];
+    for (const re of patterns) {
+      const m = body.match(re);
+      if (m) {
+        const raw = (m[1] || '').trim().toLowerCase();
+        const map = { 'm2': 'm²', 'm3': 'm³', 'metro quadrado': 'm²', 'metro linear': 'ml', 'peca': 'pç', 'caixa': 'cx', 'peça': 'pç' };
+        return map[raw] || raw || '';
+      }
+    }
+    return '';
+  }
+
   return {
     name:  getName(),
     brand: getBrand(),
@@ -619,7 +637,8 @@ function extractProductFromPage() {
     price: getPrice(),
     img:   getBestImage(),
     dims:  '',
-    url:   window.location.href
+    url:   window.location.href,
+    unit:  getUnit()
   };
 }
 
