@@ -98,7 +98,11 @@
     .btn-update:hover    { background: #4e5a6b; }
 
     /* ── Content area ─────────────────────────────────────── */
-    .content { max-width: 720px; margin: 0 auto; padding: 20px; }
+    /* Fluid width that fills most of the screen while keeping a side margin.
+     * width:92% → always ~4% breathing room on each side (scales with viewport).
+     * max-width caps it on very wide monitors so the table stays readable.
+     * margin:0 auto centers the column; everything inside is width:100% fluid. */
+    .content { width: 92%; max-width: 1320px; margin: 0 auto; padding: 20px; }
 
     .section-title {
       font-size: 9px;
@@ -268,6 +272,12 @@
     .items-table .col-total { text-align: center; white-space: nowrap; }
     .items-table .col-total { font-weight: 600; color: var(--ferrugem); }
 
+    /* Name cell: editable field + optional link icon to the source page */
+    .name-cell { display: flex; align-items: center; gap: 6px; }
+    .name-cell input { flex: 1; min-width: 0; }
+    .name-link { flex-shrink: 0; text-decoration: none; font-size: 13px; line-height: 1; cursor: pointer; opacity: 0.7; transition: opacity 0.12s; }
+    .name-link:hover { opacity: 1; }
+
     .act-btn.expand {
       background: var(--areia);
       color: var(--ferrugem);
@@ -275,6 +285,217 @@
       font-size: 10px;
     }
     .act-btn.expand:hover { background: var(--areia-dark); }
+
+    /* ── Divisor de disciplina ───────────────────────── */
+    /* Faixa colorida que abre cada grupo de itens dentro da tabela do projeto.
+       As cores são as mesmas dos badges de categoria do popup. */
+    .disc-row td {
+      padding: 0;
+      border-bottom: none;
+      background: none !important; /* imune ao hover de linha */
+    }
+    .disc-bar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 14px 0 2px;
+      padding: 5px 10px;
+      border-radius: 4px;
+      color: #fff;
+    }
+    .disc-name {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+    .disc-count { font-size: 10px; opacity: 0.75; flex: 1; }
+    .disc-total { font-size: 11.5px; font-weight: 700; }
+
+    .disc-revestimentos     { background: #9F4F39; }
+    .disc-loucas-metais     { background: #5E6979; }
+    .disc-iluminacao        { background: #AA9C79; }
+    .disc-eletros           { background: #607080; }
+    .disc-moveis            { background: #8D6E63; }
+    .disc-decoracao-enxoval { background: #8E9A6A; }
+    .disc-outros            { background: #9AA09A; }
+
+    /* ── Arrastar para reordenar ─────────────────────── */
+    /* A linha inteira só vira arrastável enquanto a alça está pressionada;
+       do contrário o arraste roubaria a seleção de texto dos campos. */
+    .drag-handle {
+      cursor: grab;
+      color: var(--duna);
+      font-size: 14px;
+      line-height: 1;
+      user-select: none;
+      text-align: center;
+      width: 18px;
+    }
+    .drag-handle:hover { color: var(--ferrugem); }
+    .drag-handle:active { cursor: grabbing; }
+    .items-table tr.dragging td { opacity: 0.4; }
+    /* Indicador de onde o item vai cair */
+    .items-table tr.drop-before td { box-shadow: inset 0 2px 0 var(--ferrugem); }
+    .items-table tr.drop-after  td { box-shadow: inset 0 -2px 0 var(--ferrugem); }
+
+    /* ── Excluir item ─────────────────────────────────── */
+    .item-del-btn {
+      width: 22px; height: 22px;
+      border: none;
+      background: transparent;
+      color: var(--duna);
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 15px;
+      line-height: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.12s;
+    }
+    .item-del-btn:hover { background: #fee2e2; color: #dc2626; }
+
+    /* ── Quantidade digitável ────────────────────────── */
+    .qty-wrap { display: flex; align-items: center; justify-content: center; gap: 3px; }
+    .qty-step {
+      width: 20px; height: 22px;
+      border: 1px solid #e0d6ce;
+      background: #fff;
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 13px;
+      line-height: 1;
+      color: var(--text);
+      font-family: inherit;
+      transition: all 0.12s;
+    }
+    .qty-step:hover { background: var(--ferrugem); color: #fff; border-color: var(--ferrugem); }
+    .qty-input {
+      width: 46px;
+      padding: 4px 4px;
+      border: 1px solid #e0d6ce;
+      border-radius: 4px;
+      font-size: 12px;
+      font-family: inherit;
+      text-align: center;
+      background: #fff;
+      color: var(--text);
+      transition: border-color 0.12s;
+    }
+    .qty-input:focus { outline: none; border-color: var(--ferrugem); }
+    /* Some com as setinhas nativas: os botões − e + fazem esse papel */
+    .qty-input::-webkit-outer-spin-button,
+    .qty-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+
+    /* ── Price edit ──────────────────────────────────── */
+    .price-edit-wrap { display: flex; flex-direction: column; gap: 3px; }
+    .price-input {
+      width: 90px;
+      padding: 4px 6px;
+      border: 1px solid #e0d6ce;
+      border-radius: 4px;
+      font-size: 12px;
+      font-family: inherit;
+      background: #fff;
+      color: var(--text);
+      text-align: right;
+    }
+    .price-input:focus { outline: none; border-color: var(--ferrugem); }
+    .price-input.edited { border-color: #dc2626; color: #dc2626; }
+    .diff-link-input {
+      width: 90px;
+      padding: 3px 5px;
+      border: 1px solid #fecaca;
+      border-radius: 3px;
+      font-size: 9px;
+      font-family: inherit;
+      background: #fff5f5;
+      color: var(--text);
+    }
+    .diff-link-input:focus { outline: none; border-color: #dc2626; }
+    .diff-link-label { font-size: 8px; color: #dc2626; font-weight: 600; }
+
+    /* ── Import modal ────────────────────────────────── */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.45);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal {
+      background: #fff;
+      border-radius: 10px;
+      padding: 28px;
+      width: 420px;
+      max-width: 92vw;
+      box-shadow: 0 12px 48px rgba(0,0,0,0.22);
+      font-family: 'Montserrat', sans-serif;
+    }
+    .modal-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 6px;
+    }
+    .modal-sub {
+      font-size: 11px;
+      color: var(--muted);
+      margin-bottom: 20px;
+      line-height: 1.6;
+    }
+    .modal-dropzone {
+      border: 2px dashed var(--border);
+      border-radius: 8px;
+      padding: 28px 16px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+      margin-bottom: 16px;
+    }
+    .modal-dropzone:hover,
+    .modal-dropzone.dragover { border-color: var(--ferrugem); background: var(--areia); }
+    .modal-dropzone-icon { font-size: 28px; margin-bottom: 8px; }
+    .modal-dropzone-label { font-size: 12px; color: var(--muted); }
+    .modal-dropzone-label strong { color: var(--ferrugem); }
+    .modal-or {
+      display: flex;
+      align-items: center;
+      text-align: center;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      margin: 4px 0 12px;
+    }
+    .modal-or::before,
+    .modal-or::after {
+      content: "";
+      flex: 1;
+      border-top: 1px solid var(--border);
+    }
+    .modal-or::before { margin-right: 10px; }
+    .modal-or::after  { margin-left: 10px; }
+    .modal-code-input {
+      width: 100%;
+      box-sizing: border-box;
+      min-height: 90px;
+      resize: vertical;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-family: ui-monospace, "Cascadia Code", "Courier New", monospace;
+      font-size: 11px;
+      color: var(--text);
+      background: #fff;
+      margin-bottom: 16px;
+    }
+    .modal-code-input:focus { outline: none; border-color: var(--ferrugem); }
+    .modal-footer { display: flex; justify-content: flex-end; gap: 8px; }
 
     #toast {
       position: fixed;
@@ -330,6 +551,30 @@
 
   <div id="toast"></div>
 
+  <!-- Import project modal -->
+  <div class="modal-overlay" id="importModal">
+    <div class="modal">
+      <div class="modal-title">📂 Importar Projeto</div>
+      <div class="modal-sub">Selecione o arquivo <strong>.txt</strong> exportado pela Decorafit.<br/>O projeto será adicionado à sua biblioteca.</div>
+      <div class="modal-dropzone" id="importDropzone">
+        <div class="modal-dropzone-icon">📄</div>
+        <div class="modal-dropzone-label">
+          Arraste o arquivo aqui ou <strong>clique para selecionar</strong>
+        </div>
+        <input type="file" id="importFileInput" accept=".txt,text/plain" style="display:none"/>
+      </div>
+      <div class="modal-or">ou cole o código</div>
+      <div class="modal-sub">Cole o código copiado da aba <strong>"código da extensão"</strong> do Excel.</div>
+      <textarea id="importCodeInput" class="modal-code-input" placeholder="Cole aqui o código do projeto..."></textarea>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="importCancelBtn">Cancelar</button>
+        <button class="btn" id="importCodeBtn">Importar Código</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- categories.js define DECORAFIT_CATEGORIES, usado ao validar importações -->
+  <script src="categories.js"></script>
   <script src="library.js"></script>
 </body>
 </html>

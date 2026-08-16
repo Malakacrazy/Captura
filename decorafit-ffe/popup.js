@@ -1,24 +1,20 @@
-// popup.js v2 — Decorafit FF&E
+// popup.js v3 — Decorafit FF&E
 //
-// Controls the extension popup (the small panel that opens when you click the
-// toolbar icon). Manages the product list UI, manual product entry, the
-// "capture from page" button, category filtering, and navigation to the
-// PDF / Library pages.
+// Controla o popup da extensão (o painel que abre ao clicar no ícone da barra
+// de ferramentas): lista de produtos, entrada manual, botão de captura, filtro
+// por categoria e navegação para as páginas de PDF e Biblioteca.
+//
+// A raspagem NÃO mora mais aqui. Este arquivo tinha uma cópia inteira do
+// extrator, espelhando a de content.js, e as duas já haviam divergido. Hoje a
+// captura é delegada a background.js, que injeta extractor.js — implementação
+// única para os dois botões.
 
-// Shorthand for document.getElementById — used throughout to keep DOM lookups terse
+// Atalho para document.getElementById, usado o tempo todo
 const $ = id => document.getElementById(id);
 
-// Canonical category list — defines both the internal id stored on each product
-// and the display label shown in badges and dropdowns
-const CATEGORIES = [
-  { id: 'revestimentos',     label: 'Revestimentos' },
-  { id: 'loucas-metais',     label: 'Louças e Metais' },
-  { id: 'iluminacao',        label: 'Iluminação e Elétrica' },
-  { id: 'eletros',           label: 'Eletros' },
-  { id: 'moveis',            label: 'Movéis' },
-  { id: 'decoracao-enxoval', label: 'Decoração e Enxoval' },
-  { id: 'outros',            label: 'Outros' }
-];
+// Categorias vêm de categories.js (carregado antes deste script em popup.html),
+// a mesma fonte usada por background.js e print.js.
+const CATEGORIES = DECORAFIT_CATEGORIES;
 
 // Module-level state — the popup is a single-page UI that re-renders from these
 let products    = [];    // full product array loaded from storage
@@ -80,23 +76,26 @@ function render() {
   if (visible.length === 0) {
     empty.style.display = '';
     $('generateBtn').disabled = true;
-    // prodCount always reflects the total budget size, even when a filter is active,
-    // so the user can see how many products exist outside the current filter view
-    $('prodCount').textContent  = products.length;
-    $('totalValue').textContent = fmt(0);
+    // Contagem e total seguem refletindo o orçamento inteiro, mesmo com um
+    // filtro vazio na tela — antes o total zerava aqui, dando a impressão de
+    // que o orçamento tinha se perdido ao clicar numa categoria sem itens.
+    refreshTotals();
     return;
   }
 
   empty.style.display = 'none';
   $('generateBtn').disabled = false;
 
-  let total = 0;
-  visible.forEach(p => {
-    total += (p.price || 0) * (p.qty || 1);
-    list.appendChild(buildRow(p));
-  });
+  visible.forEach(p => list.appendChild(buildRow(p)));
 
-  // Count and total always reflect ALL products, not just the filtered subset
+  refreshTotals();
+}
+
+// Contagem e total do rodapé. Extraído de render() para que alterar a
+// quantidade digitando possa atualizar o rodapé sem redesenhar a lista —
+// redesenhar tiraria o foco do campo no meio da digitação.
+// Os números sempre refletem TODOS os produtos, não apenas o filtro ativo.
+function refreshTotals() {
   $('prodCount').textContent  = products.length;
   $('totalValue').textContent = fmt(products.reduce((s, p) => s + (p.price || 0) * (p.qty || 1), 0));
 }
@@ -134,10 +133,20 @@ function buildRow(p) {
   const body = document.createElement('div');
   body.className = 'prod-body';
 
-  const name = document.createElement('div');
+  // Render the title as a link to the source page when a URL was captured,
+  // otherwise as a plain div. The anchor keeps the same colour (see CSS) and
+  // opens the store page in a new tab.
+  const name = document.createElement(p.url ? 'a' : 'div');
   name.className   = 'prod-name';
-  name.title       = p.name; // full name as tooltip in case it's truncated by CSS
   name.textContent = p.name;
+  if (p.url) {
+    name.href   = p.url;
+    name.target = '_blank';
+    name.rel    = 'noopener noreferrer';
+    name.title  = p.url; // show the destination on hover
+  } else {
+    name.title  = p.name; // full name as tooltip in case it's truncated by CSS
+  }
 
   // Secondary line: "Brand · SKU 12345" — only shows fields that exist
   const meta = document.createElement('div');
@@ -211,9 +220,15 @@ function buildRow(p) {
   decBtn.textContent = '−';
   decBtn.title      = 'Diminuir quantidade';
 
-  const qtySpan = document.createElement('span');
-  qtySpan.className   = 'qty-val';
-  qtySpan.textContent = p.qty || 1;
+  // Campo digitável para lançar quantidades grandes de uma vez, em vez de
+  // clicar em + dezenas de vezes. Os botões continuam para o ajuste fino.
+  const qtyInput = document.createElement('input');
+  qtyInput.type      = 'number';
+  qtyInput.className = 'qty-val';
+  qtyInput.min       = '1';
+  qtyInput.step      = '1';
+  qtyInput.value     = p.qty || 1;
+  qtyInput.title     = 'Quantidade';
 
   const incBtn = document.createElement('button');
   incBtn.className  = 'qty-btn';
@@ -225,21 +240,36 @@ function buildRow(p) {
   delBtn.title      = 'Remover';
   delBtn.textContent = '×';
 
-  // Mutate the product in the module-level array by index rather than rebuilding
-  // the array from scratch — avoids the O(n) filter on every keypress
-  decBtn.addEventListener('click', async () => {
+  // Altera a quantidade e atualiza só o que mudou na tela (preço da linha e
+  // rodapé), sem redesenhar a lista — um render() completo tiraria o foco do
+  // campo no meio da digitação.
+  // Somente inteiros: 2,5 vira 2; qualquer coisa inválida vira 1.
+  // `refletir` diz se o valor normalizado volta para dentro do campo — durante
+  // a digitação não mexemos nele para não atrapalhar o cursor.
+  const setQty = (valor, refletir) => {
     const idx = products.findIndex(x => x.id === p.id);
     if (idx === -1) return;
-    products[idx].qty = Math.max(1, (products[idx].qty || 1) - 1); // floor at 1
-    await save(); render();
-  });
+    const q = Math.max(1, Math.floor(valor) || 1);
+    products[idx].qty = q;
+    p.qty = q;
+    if (refletir) qtyInput.value = q;
+    price.textContent = fmt((p.price || 0) * q);
+    refreshTotals();
+    save();
+  };
 
-  incBtn.addEventListener('click', async () => {
-    const idx = products.findIndex(x => x.id === p.id);
-    if (idx === -1) return;
-    products[idx].qty = (products[idx].qty || 1) + 1;
-    await save(); render();
+  // Só aceitamos valores já válidos enquanto digita: sem isso, apagar o "1"
+  // para escrever "40" faria o campo se reescrever como 1 a cada tecla.
+  qtyInput.addEventListener('input', () => {
+    const v = parseInt(qtyInput.value, 10);
+    if (Number.isFinite(v) && v >= 1) setQty(v, false);
   });
+  // Ao sair do campo, normaliza e devolve o valor final para a tela
+  qtyInput.addEventListener('change', () => setQty(parseInt(qtyInput.value, 10), true));
+  qtyInput.addEventListener('keydown', e => { if (e.key === 'Enter') qtyInput.blur(); });
+
+  decBtn.addEventListener('click', () => setQty((p.qty || 1) - 1, true));
+  incBtn.addEventListener('click', () => setQty((p.qty || 1) + 1, true));
 
   // Filter returns a new array so the module-level reference is replaced atomically
   delBtn.addEventListener('click', async () => {
@@ -247,7 +277,7 @@ function buildRow(p) {
     await save(); render();
   });
 
-  controls.append(decBtn, qtySpan, incBtn, delBtn);
+  controls.append(decBtn, qtyInput, incBtn, delBtn);
   right.append(price, controls);
   item.append(imgWrap, body, right);
   return item;
@@ -293,7 +323,10 @@ $('addManualBtn').addEventListener('click', async () => {
   const category = $('f-cat').value;
 
   const unit = $('f-unit').value.trim();
-  products.push({ id: Date.now(), name, brand, sku, price, qty, category, img: '', dims: '', url: '', unit });
+  // crypto.randomUUID() em vez de Date.now(): dois itens criados no mesmo
+  // milissegundo recebiam o mesmo id, e como a exclusão filtra por id, remover
+  // um deles removia os dois.
+  products.push({ id: crypto.randomUUID(), name, brand, sku, price, qty, category, img: '', dims: '', url: '', unit });
   await save();
 
   // Clear the form fields for the next entry
@@ -313,80 +346,45 @@ $('addManualBtn').addEventListener('click', async () => {
 
 // ─── Capture from current tab ─────────────────────────────────────────────────
 
-// This button runs the extraction logic on the active store tab using
-// chrome.scripting.executeScript, which injects a function into the tab's context.
-// We can't use content.js directly here because the popup runs in the extension's
-// own context — it has no access to the store page's DOM.
+// A captura é delegada a background.js: ele injeta extractor.js na aba, repete
+// até a SPA hidratar, classifica, deduplica e grava no orçamento. O popup só
+// pede, relê o storage e redesenha.
+//
+// O popup roda no contexto da extensão e não enxerga o DOM da loja, por isso
+// precisa informar qual aba deve ser capturada.
 $('captureBtn').addEventListener('click', async () => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id) return;
 
-  showStatus('⏳ Capturando produto...', 'info', 8000); // long timeout while injection runs
+  showStatus('⏳ Capturando produto...', 'info', 8000);
 
-  try {
-    // Inject extractProductFromPage into the active tab and await its return value.
-    // The function is serialised and re-parsed in the tab's JS context, so it cannot
-    // close over any variables from this popup module — it must be fully self-contained.
-    const results = await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      func: extractProductFromPage
-    });
+  const res = await chrome.runtime.sendMessage({ action: 'captureProduct', tabId: tab.id })
+    .catch(() => null); // service worker indisponível
 
-    const d = results?.[0]?.result;
-
-    if (!d?.name) {
-      showStatus('⚠ Produto não identificado nesta página', 'warn');
-      return;
-    }
-
-    const cat = guessCategory(d.name);
-
-    products.push({
-      id:       Date.now(),
-      name:     d.name,
-      brand:    d.brand  || '',
-      sku:      d.sku    || '',
-      price:    d.price  || 0,
-      qty:      1,
-      category: cat,
-      img:      d.img    || '',
-      dims:     d.dims   || '',
-      url:      d.url    || '',
-      unit:     d.unit   || ''
-    });
-
-    await save();
-    // Switch to 'all' so the captured product is always visible after capture
-    activeFilter = 'all';
-    document.querySelectorAll('.cat-tab').forEach(t => t.classList.toggle('active', t.dataset.cat === 'all'));
-    render();
-
-    showStatus(`✓ "${d.name.substring(0, 42)}…" adicionado como ${CATEGORIES.find(c=>c.id===cat)?.label}`, 'ok');
-  } catch (err) {
-    showStatus('⚠ Erro ao acessar esta página. Tente em uma loja online.', 'warn');
+  if (!res) {
+    showStatus('⚠ Erro ao capturar. Tente novamente.', 'warn');
+    return;
   }
-});
+  if (!res.ok) {
+    showStatus(res.reason === 'blocked'
+      ? '⚠ Não é possível capturar nesta página. Tente em uma loja online.'
+      : '⚠ Produto não identificado nesta página', 'warn');
+    return;
+  }
 
-// ─── Category auto-detection ──────────────────────────────────────────────────
-// Duplicate of the same function in content.js — necessary because extractProductFromPage
-// runs in the page context (where popup.js variables are not available) while
-// guessCategory here is used for products captured via executeScript.
-function guessCategory(name) {
-  const n = name.toLowerCase();
-  if (/piso|cerâmic|porcelan|revestimento|argamassa|rejunte|tijolet|pedra|mármo|granito|parquet|laminado|deck|azulejo|grês/.test(n))
-    return 'revestimentos';
-  if (/vaso sanitário|bacia sanitária|cuba|torneira|ducha|chuveiro|sifão|mictório|válvula|box|banheira|fechadura|cadeado|registro|misturador|metalic/.test(n))
-    return 'loucas-metais';
-  if (/luminária|lâmpada|lustre|arandela|spot|trilho|pendente|led|plafon/.test(n))
-    return 'iluminacao';
-  if (/geladeira|refrigerador|fogão|forno|microondas|máquina de lavar|máquina de secar|lava.louça|lavadora|secadora|air fryer|aspirador|purificador|climatizador|ar condicionado|ventilador|exaustor|coifa|cooktop/.test(n))
-    return 'eletros';
-  if (/sofá|poltrona|mesa|cadeira|cama|colchão|armário|guarda.roupa|estante|rack|prateleira|criado.mudo|aparador|buffet|escrivaninha|banco|pufe|cabeceira|penteadeira/.test(n))
-    return 'moveis';
-  if (/tapete|quadro|almofada|cortina|persiana|espelho|toalha|lençol|fronha|edredom|travesseiro|enxoval|roupa de cama|vaso decorat|planta|interruptor|tomada|decoração|objeto decorat/.test(n))
-    return 'decoracao-enxoval';
-  return 'outros';
-}
+  // background.js já escreveu em storage; recarregamos para refletir a mudança
+  const data = await chrome.storage.local.get('products');
+  products = data.products || [];
+
+  // Volta para "Todos" para que o item capturado apareça mesmo com filtro ativo
+  activeFilter = 'all';
+  document.querySelectorAll('.cat-tab').forEach(t => t.classList.toggle('active', t.dataset.cat === 'all'));
+  render();
+
+  showStatus(res.deduped
+    ? `✓ Já estava no orçamento — quantidade: ${res.qty}`
+    : `✓ "${(res.name || '').substring(0, 42)}…" adicionado como ${res.categoryLabel}`, 'ok');
+});
 
 // ─── Clear all ────────────────────────────────────────────────────────────────
 
@@ -404,243 +402,26 @@ $('clearBtn').addEventListener('click', async () => {
 // The popup cannot call chrome.tabs.create directly without the 'tabs' permission
 // (which it has), but delegating to the background keeps the popup clean and
 // makes it easy to add behaviour (e.g. focus an existing tab) in one place.
-$('generateBtn').addEventListener('click', () => {
-  chrome.runtime.sendMessage({ action: 'openPrint' });
-});
-
-$('libraryBtn').addEventListener('click', () => {
-  chrome.runtime.sendMessage({ action: 'openLibrary' });
-});
-
-// ─── Page-context product extractor ──────────────────────────────────────────
-// This function is SERIALISED and injected into the store tab via executeScript.
-// It CANNOT reference any variable from this popup module — it runs in a completely
-// separate JavaScript context. All helpers must be defined inside it.
-function extractProductFromPage() {
-
-  // Parses all JSON-LD scripts and returns the first value that the `pick` callback
-  // extracts from any node. Handles @graph unwrapping (see content.js for full notes).
-  function fromJsonLD(pick) {
-    for (const s of document.querySelectorAll('script[type="application/ld+json"]')) {
-      try {
-        const root = JSON.parse(s.textContent);
-        const nodes = [];
-        const unwrap = o => {
-          if (Array.isArray(o)) o.forEach(unwrap);
-          else if (o && typeof o === 'object') {
-            nodes.push(o);
-            if (o['@graph']) unwrap(o['@graph']);
-          }
-        };
-        unwrap(root);
-        for (const n of nodes) {
-          const v = pick(n);
-          if (v !== null && v !== undefined && v !== '') return v;
-        }
-      } catch {}
+// Sends a message to background.js and falls back to chrome.tabs.create if the
+// service worker is inactive (common in MV3 — worker can be terminated when idle).
+function openExtPage(action, file) {
+  chrome.runtime.sendMessage({ action }, () => {
+    if (chrome.runtime.lastError) {
+      // Service worker didn't respond — open the tab directly as fallback
+      chrome.tabs.create({ url: chrome.runtime.getURL(file) });
     }
-    return null;
-  }
-
-  // Converts Brazilian price strings ("1.234,56" or "199,90") to JS floats
-  function parsePrice(str) {
-    if (!str) return 0;
-    const m = str.match(/[\d.,]+/);
-    if (!m) return 0;
-    const raw = m[0];
-    if (/\d{1,3}(\.\d{3})+(,\d{2})?$/.test(raw))
-      return parseFloat(raw.replace(/\./g, '').replace(',', '.'));
-    if (raw.includes(','))
-      return parseFloat(raw.replace(/\./g, '').replace(',', '.'));
-    return parseFloat(raw) || 0;
-  }
-
-  // Reads the VTEX Redux store (window.__STATE__) for price data stored in cents
-  function getVtexPrice() {
-    try {
-      const state = window.__STATE__;
-      if (!state) return null;
-      for (const key of Object.keys(state)) {
-        const node = state[key];
-        if (node?.selling?.price) return node.selling.price / 100;
-        if (node?.spotPrice)      return node.spotPrice;
-      }
-    } catch {}
-    return null;
-  }
-
-  const host = location.hostname.replace(/^www\./, '');
-
-  // Site-specific → og:title → h1 → document.title fallback chain for product name
-  function getName() {
-    if (host.includes('leroymerlin')) {
-      const el = document.querySelector('[data-testid="product-name"], h1[class*="title"], h1[class*="product"]');
-      if (el?.innerText) return el.innerText.trim();
-    }
-    if (host.includes('samsung')) {
-      const el = document.querySelector('.pd-title, h1[class*="title"], h1[class*="product"]');
-      if (el?.innerText) return el.innerText.trim();
-    }
-    if (host.includes('electrolux') || host.includes('brastemp')) {
-      const el = document.querySelector('h1[class*="product"], h1[class*="name"], h1');
-      if (el?.innerText) return el.innerText.trim();
-    }
-    if (host.includes('dexco') || host.includes('deca.')) {
-      const el = document.querySelector('h1[class*="product"], h1[class*="title"], h1');
-      if (el?.innerText) return el.innerText.trim();
-    }
-    const og = document.querySelector('meta[property="og:title"]')?.content?.trim();
-    if (og && og.length > 3) return og;
-    const h1 = document.querySelector('h1');
-    if (h1) return h1.innerText.trim();
-    return document.title.split(/[|\-–·]/)[0].trim();
-  }
-
-  // meta tag → JSON-LD → DOM selector fallback for brand
-  function getBrand() {
-    const fromMeta = document.querySelector('meta[property="product:brand"]')?.content
-      || document.querySelector('meta[itemprop="brand"]')?.content;
-    if (fromMeta) return fromMeta.trim();
-    const fromLD = fromJsonLD(d => {
-      if (d?.brand?.name) return d.brand.name;
-      if (typeof d?.brand === 'string' && d.brand) return d.brand;
-      return null;
-    });
-    if (fromLD) return fromLD;
-    const el = document.querySelector(
-      '[data-testid="brand-name"], [class*="product-brand"], [class*="brandName"], [itemprop="brand"]'
-    );
-    if (el?.innerText) return el.innerText.trim();
-    return '';
-  }
-
-  // JSON-LD sku/mpn → body text regex for SKU
-  function getSKU() {
-    const fromLD = fromJsonLD(d => d?.sku || d?.mpn || null);
-    if (fromLD) return String(fromLD);
-    const m = document.body.innerText.match(/(?:SKU|Cód\.?|Código|Referência|Ref\.?|Art\.?)[:\s#]*([A-Z0-9\-]{4,20})/i);
-    return m ? m[1].trim() : '';
-  }
-
-  // Five-tier price fallback: JSON-LD → meta → VTEX → site CSS → text walk
-  function getPrice() {
-    const ldPrice = fromJsonLD(d => {
-      const offers = d?.offers || d?.Offers;
-      if (!offers) return null;
-      const arr = Array.isArray(offers) ? offers : [offers];
-      const ps = arr
-        .map(o => parseFloat(String(o?.price ?? o?.lowPrice ?? 0).replace(',', '.')))
-        .filter(p => p > 0);
-      return ps.length ? Math.min(...ps) : null;
-    });
-    if (ldPrice && ldPrice > 0) return ldPrice;
-    const metaP = document.querySelector('meta[property="product:price:amount"]')?.content;
-    if (metaP) { const v = parseFloat(metaP.replace(',', '.')); if (v > 0) return v; }
-    const vtex = getVtexPrice();
-    if (vtex && vtex > 0) return vtex;
-    const SITE_PRICE_SEL = {
-      'telhanorte':    '.priceSpot, [class*="priceSpot"], [class*="price-spot"], .valoper__price',
-      'obrafacil':     '.price-spot, .price__selling, [class*="sellingPrice"]',
-      'abcconstrucao': '.price-spot, .product-price, [class*="price"]',
-      'leroymerlin':   '[data-testid="price"], [class*="sellingPrice"], [class*="price__selling"]',
-      'andra':         '.price, [class*="product-price"], [class*="sellingPrice"]',
-      'inspirehome':   '.price, [class*="product-price"]',
-      'yamamura':      '.price, [class*="product-price"], [class*="sellingPrice"]',
-      'belametais':    '.price, [class*="product-price"]',
-      'tokstok':       '[class*="spotPrice"], [class*="priceContainer"] .price',
-      'westwing':      '[class*="ProductPrice"], [class*="price__selling"]',
-      'boobam':        '.price, [class*="product-price"], [class*="sellingPrice"]',
-      'camicado':      '[class*="spotPrice"], [class*="sellingPrice"]',
-      'muma':          '.price, [class*="product-price"]',
-      'dexco':         '.price, [class*="product-price"]',
-      'deca.':         '.price, [class*="product-price"]',
-      'electrolux':    '[class*="product-price"], [class*="price-info"], .price',
-      'fastshop':      '[class*="bestPrice"], [class*="price-best"], .price',
-      'brastemp':      '[class*="product-price"], [class*="price-info"], .price',
-      'samsung':       '[class*="price-info"], [class*="pd-price"], [class*="price"]',
-    };
-    for (const [key, sel] of Object.entries(SITE_PRICE_SEL)) {
-      if (host.includes(key)) {
-        const el = document.querySelector(sel);
-        if (el) { const v = parsePrice(el.textContent); if (v > 0) return v; }
-        break;
-      }
-    }
-    // Text-walk fallback: collect all R$ values and return the most frequent one
-    const prices = [];
-    const walk = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
-    let node;
-    while ((node = walk.nextNode())) {
-      const m = node.textContent.match(/R\$\s*([\d.,]+)/);
-      if (m) {
-        const v = parsePrice(m[1]);
-        if (v > 0 && v < 500000) prices.push(v);
-      }
-    }
-    if (prices.length > 0) {
-      const freq = {};
-      prices.forEach(v => freq[v] = (freq[v] || 0) + 1);
-      return parseFloat(Object.entries(freq).sort((a, b) => b[1] - a[1])[0][0]);
-    }
-    return 0;
-  }
-
-  // og:image → JSON-LD → largest <img> fallback for product image URL
-  function getBestImage() {
-    const og = document.querySelector('meta[property="og:image"]')?.content;
-    if (og && !/logo|icon/.test(og.toLowerCase())) return og;
-    const ldImg = fromJsonLD(d => {
-      if (typeof d?.image === 'string' && d.image) return d.image;
-      if (d?.image?.url) return d.image.url;
-      if (Array.isArray(d?.image) && d.image.length)
-        return typeof d.image[0] === 'string' ? d.image[0] : (d.image[0]?.url || null);
-      return null;
-    });
-    if (ldImg) return ldImg;
-    // Check lazy-load data attributes; filter noise; sort by pixel area
-    const candidates = [...document.images]
-      .map(img => ({
-        src: img.src || img.dataset.src || img.dataset.lazySrc || img.dataset.original || '',
-        area: img.naturalWidth * img.naturalHeight,
-        ratio: img.naturalWidth / (img.naturalHeight || 1),
-      }))
-      .filter(({ src, area, ratio }) => {
-        if (!src || area < 150 * 150) return false;
-        if (/logo|icon|sprite|banner|badge|avatar|header|footer/.test(src.toLowerCase())) return false;
-        return ratio >= 0.4 && ratio <= 2.5;
-      })
-      .sort((a, b) => b.area - a.area);
-    return candidates[0]?.src || '';
-  }
-
-  function getUnit() {
-    const body = document.body.innerText;
-    const patterns = [
-      /(?:vendido|venda|preço)\s+(?:por|p\/)\s*(m²|m2|m³|m3|ml|un|pç|peça|cx|caixa|kg|litro|rolo|par|jogo|conjunto|metro linear|metro quadrado|metro)/i,
-      /(?:unidade\s+de\s+medida|und\.?\s*medida|un\.?\s*med\.?)[:\s]*(m²|m2|m³|m3|ml|un|pç|peça|cx|caixa|kg|litro|rolo|par|jogo|conjunto|metro linear|metro quadrado|metro)/i,
-    ];
-    for (const re of patterns) {
-      const m = body.match(re);
-      if (m) {
-        const raw = (m[1] || '').trim().toLowerCase();
-        const map = { 'm2': 'm²', 'm3': 'm³', 'metro quadrado': 'm²', 'metro linear': 'ml', 'peca': 'pç', 'caixa': 'cx', 'peça': 'pç' };
-        return map[raw] || raw || '';
-      }
-    }
-    return '';
-  }
-
-  return {
-    name:  getName(),
-    brand: getBrand(),
-    sku:   getSKU(),
-    price: getPrice(),
-    img:   getBestImage(),
-    dims:  '',
-    url:   window.location.href,
-    unit:  getUnit()
-  };
+  });
 }
+
+// Exportar daqui significa "exportar o orçamento em andamento". Limpamos
+// printPayload para que a página de impressão não reaproveite um projeto salvo
+// que a Biblioteca tenha enfileirado antes.
+$('generateBtn').addEventListener('click', async () => {
+  await chrome.storage.local.set({ printPayload: null });
+  openExtPage('openPrint', 'print.html');
+});
+
+$('libraryBtn').addEventListener('click', () => openExtPage('openLibrary', 'library.html'));
 
 // ─── Boot ─────────────────────────────────────────────────────────────────────
 init();

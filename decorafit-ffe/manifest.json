@@ -1,14 +1,15 @@
 {
   "manifest_version": 3,
   "name": "Decorafit · Orçamento FF&E",
-  "version": "1.0.0",
+  "version": "6.0",
   "description": "Capture produtos de lojas online e gere orçamentos com a identidade visual da Decorafit.",
   "permissions": [
     "storage",
     "unlimitedStorage",
     "activeTab",
     "scripting",
-    "tabs"
+    "tabs",
+    "clipboardWrite"
   ],
   "host_permissions": [
     "<all_urls>"
@@ -29,12 +30,18 @@
       "css": ["content.css"]
     }
   ],
+  "commands": {
+    "toggle-fab": {
+      "suggested_key": { "default": "Ctrl+Period" },
+      "description": "Mostrar/ocultar botões Decorafit"
+    }
+  },
   "background": {
     "service_worker": "background.js"
   },
   "web_accessible_resources": [
     {
-      "resources": ["popup.html", "popup.js", "print.html", "print.js", "library.html", "library.js", "icons/*"],
+      "resources": ["popup.html"],
       "matches": ["<all_urls>"]
     }
   ]

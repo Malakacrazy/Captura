@@ -1,18 +1,68 @@
 // print.js — Decorafit FF&E
-// Handles the print/export page: renders the product list for PDF printing
-// and generates a formatted .xlsx spreadsheet from the same data.
+// Página de impressão/exportação: renderiza a lista de produtos para o PDF e
+// gera a planilha .xlsx formatada a partir dos mesmos dados.
+
+// ─── Fonte dos dados ─────────────────────────────────────────────────────────
+//
+// A página exporta o ORÇAMENTO EM ANDAMENTO por padrão, mas a Biblioteca também
+// exporta um projeto salvo específico. Para isso, quem abre esta página grava
+// antes a chave `printPayload`:
+//   • Biblioteca, exportando um projeto → printPayload = { name, products }
+//   • Popup, exportando o orçamento     → printPayload = null
+// A chave NÃO é apagada na leitura, para que recarregar esta aba continue
+// mostrando o mesmo conteúdo em vez de trocar de conjunto de dados.
+//
+// Carregada uma única vez e reaproveitada pelo PDF e pelo Excel — antes cada
+// caminho relia o storage por conta própria e podia divergir do que estava
+// desenhado na tela.
+let sheetData = { products: [], projectName: '' };
+
+// Promise resolvida quando sheetData já foi preenchido. Os handlers dos botões
+// dão await nela antes de ler os dados: sem isso, um clique disparado antes da
+// leitura assíncrona do storage terminar exportaria uma planilha vazia.
+let ready = null;
+
+async function loadData() {
+  const { products = [], projectName = '', printPayload = null } =
+    await chrome.storage.local.get(['products', 'projectName', 'printPayload']);
+
+  sheetData = printPayload
+    ? { products: printPayload.products || [], projectName: printPayload.name || '' }
+    : { products, projectName };
+}
 
 // ─── PDF Print ───────────────────────────────────────────────────────────────
 
-// Manifest V3 Content Security Policy blocks inline event handlers (onclick="…"),
-// so we wire up all buttons here via addEventListener instead.
+// A CSP do Manifest V3 bloqueia handlers inline (onclick="…"), então todos os
+// botões são ligados aqui via addEventListener.
 document.getElementById('printBtn').addEventListener('click', triggerPrint);
 document.getElementById('backBtn').addEventListener('click', () => window.close());
 
-// Waits for all images and fonts to settle before calling window.print(),
-// so the PDF captures everything without blank image placeholders.
+// Regra de negócio: item com preço alterado manualmente precisa de um "Link de
+// Preço Diferente" justificando a alteração. Vale para PDF **e** para Excel —
+// antes só o PDF checava, então bastava exportar a planilha para contornar.
+// Retorna true quando a exportação está liberada.
+function ensurePricesJustified(formato) {
+  const blocked = sheetData.products.filter(p => p.priceEdited && !p.diffPriceLink);
+  if (blocked.length === 0) return true;
+
+  alert(
+    `⚠ ${formato} bloqueado!\n\n` +
+    `${blocked.length} produto(s) com preço alterado sem "Link de Preço Diferente":\n\n` +
+    blocked.map(p => '• ' + (p.name || 'Sem nome')).join('\n') +
+    `\n\nAdicione o link na Biblioteca de Projetos para liberar o ${formato}.`
+  );
+  return false;
+}
+
+// Espera imagens e fontes assentarem antes de chamar window.print(), para o PDF
+// não sair com espaços em branco no lugar das miniaturas.
 async function triggerPrint() {
   const btn = document.getElementById('printBtn');
+
+  await ready;
+  if (!ensurePricesJustified('PDF')) return;
+
   btn.textContent = '⏳ Preparando...';
   btn.disabled = true;
 
@@ -40,19 +90,11 @@ async function triggerPrint() {
   }, 1000);
 }
 
-// ─── Categories ──────────────────────────────────────────────────────────────
+// ─── Categorias ──────────────────────────────────────────────────────────────
 
-// Canonical order and display labels for each product category.
-// Used both for rendering sections in the PDF and for grouping rows in Excel.
-const CATS = [
-  { id: 'revestimentos',     label: 'Revestimentos' },
-  { id: 'loucas-metais',     label: 'Louças e Metais' },
-  { id: 'iluminacao',        label: 'Iluminação e Elétrica' },
-  { id: 'eletros',           label: 'Eletros' },
-  { id: 'moveis',            label: 'Móveis' },
-  { id: 'decoracao-enxoval', label: 'Decoração e Enxoval' },
-  { id: 'outros',            label: 'Outros' }
-];
+// Ordem canônica e rótulos vêm de categories.js (carregado antes deste script
+// em print.html) — mesma fonte usada pelo popup e pelo background.
+const CATS = DECORAFIT_CATEGORIES;
 
 // Formats a number as Brazilian currency: R$ 1.234,56
 function fmt(n) {
@@ -69,9 +111,8 @@ function fmtDate() {
 // Reads product data from chrome.storage.local and builds the full page DOM:
 // header summaries, one section per category, and the grand total footer.
 async function render() {
-  const data = await chrome.storage.local.get(['products', 'projectName']);
-  const products = data.products || [];
-  const projectName = data.projectName || '';
+  await loadData();
+  const { products, projectName } = sheetData;
 
   // Stamp today's date into the document header
   document.getElementById('docDate').textContent = fmtDate();
@@ -141,7 +182,12 @@ async function render() {
     // Column headings for the product table
     const tableHeader = document.createElement('div');
     tableHeader.className = 'table-header';
-    tableHeader.innerHTML = '<div></div><div>Produto</div><div>Ambiente</div><div>Observações</div><div style="text-align:center">Qtd</div><div style="text-align:right">Subtotal</div>';
+    // 6 colunas — precisa bater com grid-template-columns em print.html.
+    // Sem custo unitário: ele fica só no Excel.
+    tableHeader.innerHTML =
+      '<div></div><div>Produto</div><div>Ambiente</div><div>Observações</div>' +
+      '<div style="text-align:center">Qtd</div>' +
+      '<div style="text-align:right">Subtotal</div>';
 
     section.append(catHeader, tableHeader);
 
@@ -215,21 +261,8 @@ function buildProductRow(p, idx) {
   const metaEl = document.createElement('div');
   metaEl.className = 'prod-meta-print';
 
-  if (p.url && metaParts.length > 0) {
-    metaEl.textContent = metaParts.join(' · ') + ' ';
-    const link = document.createElement('a');
-    link.href = p.url;
-    link.target = '_blank';
-    link.textContent = 'Ver na loja ↗';
-    metaEl.appendChild(link);
-  } else if (metaParts.length > 0) {
+  if (metaParts.length > 0) {
     metaEl.textContent = metaParts.join(' · ');
-  } else if (p.url) {
-    const link = document.createElement('a');
-    link.href = p.url;
-    link.target = '_blank';
-    link.textContent = 'Ver na loja ↗';
-    metaEl.appendChild(link);
   }
 
   infoCell.append(nameEl, metaEl);
@@ -242,7 +275,7 @@ function buildProductRow(p, idx) {
   const ambCell = document.createElement('div');
   ambCell.className = 'col-left';
   ambCell.style.fontSize = '11px';
-  ambCell.textContent = p.ambiente || '';
+  ambCell.textContent = Array.isArray(p.ambiente) ? p.ambiente.join(', ') : (p.ambiente || '');
 
   const obsCell = document.createElement('div');
   obsCell.className = 'col-left';
@@ -253,22 +286,28 @@ function buildProductRow(p, idx) {
   totalCell.className = 'col-total';
   totalCell.textContent = fmt((p.price || 0) * (p.qty || 1));
 
+  // A ordem precisa bater com o cabeçalho e com grid-template-columns (6 colunas)
   row.append(imgCell, infoCell, ambCell, obsCell, qtyCell, totalCell);
   return row;
 }
 
-render();
+ready = render();
 
 // ─── Excel Export (.xlsx) ────────────────────────────────────────────────────
 
 // Triggers buildXLSX, creates a temporary <a> to download the blob, then cleans up.
 document.getElementById('xlsxBtn').addEventListener('click', async () => {
   const btn = document.getElementById('xlsxBtn');
+
+  await ready;
+  // Mesma trava do PDF: preço editado exige link justificando
+  if (!ensurePricesJustified('Excel')) return;
+
   btn.textContent = '⏳ Gerando arquivo...';
   btn.disabled = true;
   try {
-    const { products = [], projectName = 'Orçamento' } =
-      await chrome.storage.local.get(['products', 'projectName']);
+    const products    = sheetData.products;
+    const projectName = sheetData.projectName || 'Orçamento';
     const blob = buildXLSX(products, projectName);
     // createObjectURL gives us a temporary URL pointing to the in-memory blob
     const url = URL.createObjectURL(blob);
@@ -406,18 +445,10 @@ function buildXLSX(products, projectName) {
     });
   }
 
-  // ── Category label map ───────────────────────────────────────────────────────
-  // Maps internal category ids (stored on each product) to display labels.
-  // Must stay in sync with CATS above and the category ids used by content.js.
-  const CATS_LABELS = {
-    'revestimentos':     'Revestimentos',
-    'loucas-metais':     'Louças e Metais',
-    'iluminacao':        'Iluminação e Elétrica',
-    'eletros':           'Eletros',
-    'moveis':            'Móveis',
-    'decoracao-enxoval': 'Decoração e Enxoval',
-    'outros':            'Outros'
-  };
+  // ── Rótulos das categorias ───────────────────────────────────────────────────
+  // Derivados de CATS (que vem de categories.js), então não há um segundo mapa
+  // para sair de sincronia com o resto da extensão.
+  const CATS_LABELS = Object.fromEntries(CATS.map(c => [c.id, c.label]));
 
   // Category → style index map for colored header rows
   const CAT_STYLES = {
@@ -435,16 +466,22 @@ function buildXLSX(products, projectName) {
   const catHeaderRows = new Set();
   const merges = [];
 
+  // Colunas A..K (11). Concentrado numa constante porque a última coluna
+  // aparece em todas as mesclagens de faixa — trocar em um lugar só.
+  const COLS = 'ABCDEFGHIJK';
+  const LAST = COLS[COLS.length - 1];
+  const NUM_COLS = COLS.length;
+
   // Row 1 — brand header (orange)
-  merges.push(`A1:I1`);
+  merges.push(`A1:${LAST}1`);
   rows.push([cv('DECORAFIT', 's', 5)]);
 
   // Row 2 — doc type (dark blue)
-  merges.push(`A2:I2`);
+  merges.push(`A2:${LAST}2`);
   rows.push([cv('SUGESTÃO DE ACABAMENTOS', 's', 17)]);
 
   // Row 3 — project name (light orange)
-  merges.push(`A3:I3`);
+  merges.push(`A3:${LAST}3`);
   rows.push([cv(projectName || 'Orçamento', 's', 6)]);
 
   // Row 4 — blank
@@ -456,7 +493,8 @@ function buildXLSX(products, projectName) {
   rows.push([
     cv('Produtos', 's', 18), cv(products.length, 'n', 19), cv('', 's', 18),
     cv('Unidades', 's', 18), cv(totalUnits, 'n', 19), cv('', 's', 18),
-    cv('Total do Orçamento', 's', 20), cv(grandTotalVal, 'n', 21), cv('', 's', 20)
+    cv('Total do Orçamento', 's', 20), cv(grandTotalVal, 'n', 21), cv('', 's', 20),
+    cv('', 's', 0)
   ]);
 
   // Row 6 — blank
@@ -477,14 +515,15 @@ function buildXLSX(products, projectName) {
     catHeaderRows.add(catRowIdx);
     const catStyle = CAT_STYLES[catId] || 28;
     const cnt = items.length;
-    merges.push(`A${catRowIdx+1}:I${catRowIdx+1}`);
+    merges.push(`A${catRowIdx+1}:${LAST}${catRowIdx+1}`);
     rows.push([cv(`${catLabel}  —  ${cnt} ${cnt === 1 ? 'item' : 'itens'}`, 's', catStyle)]);
 
     // Column headers (dark blue)
     rows.push([
       cv('','s',1), cv('Produto','s',1), cv('Marca','s',1),
       cv('Ambiente','s',1), cv('Observações','s',1), cv('Qtd','s',1),
-      cv('Un.','s',1), cv('Subtotal','s',1), cv('URL','s',1)
+      cv('Un.','s',1), cv('Custo Unit.','s',1), cv('Subtotal','s',1),
+      cv('URL','s',1), cv('Link Preço Dif.','s',1)
     ]);
 
     let catTotal = 0;
@@ -505,24 +544,43 @@ function buildXLSX(products, projectName) {
       const sub = (p.price || 0) * (p.qty || 1);
       catTotal += sub;
 
+      const ambStr = Array.isArray(p.ambiente) ? p.ambiente.join(', ') : (p.ambiente || '');
+      // O destaque vermelho de "preço alterado" pertence ao CUSTO UNITÁRIO, que
+      // é o valor efetivamente editado à mão — antes ia no subtotal, que é
+      // apenas o resultado da multiplicação.
+      const priceStyle = p.priceEdited ? (odd ? 30 : 29) : ns;
+
+      // A função IMAGE() do Excel exige o prefixo _xlfn. dentro do XML: é assim
+      // que o formato marca funções mais novas que o esquema original do OOXML.
+      // Sem o prefixo a célula abre como #NAME? mesmo em versões que suportam a
+      // função. O Excel remove o prefixo ao exibir a fórmula.
+      // Aspas duplas na URL quebrariam o literal da fórmula, então são retiradas.
+      const imgFormula = p.img
+        ? `_xlfn.IMAGE("${String(p.img).replace(/"/g, '')}")`
+        : null;
+
       rows.push([
-        p.img ? cv(`IMAGE("${p.img}")`, 'f', ds) : cv('', 's', ds),
+        imgFormula ? cv(imgFormula, 'f', ds) : cv('', 's', ds),
         cv(p.name||'',     's', ds),
         cv(p.brand||'',    's', ds),
-        cv(p.ambiente||'', 's', ds),
+        cv(ambStr,         's', ds),
         cv(p.obs||'',      's', ds),
         cv(p.qty||1,       'n', qs),
         cv(p.unit||'',     's', ds),
-        cv(sub,            'n', ns),
-        cv(p.url||'',      's', us)
+        cv(p.price||0,     'n', priceStyle), // H — Custo Unit.
+        cv(sub,            'n', ns),         // I — Subtotal
+        cv(p.url||'',      's', us),
+        cv(p.diffPriceLink||'', 's', us)
       ]);
     }
 
     grandTotal += catTotal;
 
+    // Rótulo em H, valor em I (a coluna Subtotal), acompanhando o deslocamento
+    // causado pela nova coluna de custo unitário.
     const subIdx = rows.length;
     subRows.add(subIdx);
-    rows.push([null,null,null,null,null,null,
+    rows.push([null,null,null,null,null,null,null,
       cv('Subtotal:', 's', 13),
       cv(catTotal,    'n', 14)
     ]);
@@ -532,15 +590,13 @@ function buildXLSX(products, projectName) {
 
   const totalIdx = rows.length;
   subRows.add(totalIdx);
-  rows.push([null,null,null,null,null,null,
+  rows.push([null,null,null,null,null,null,null,
     cv('TOTAL GERAL:', 's', 13),
     cv(grandTotal,     'n', 14)
   ]);
 
   // ── Sheet XML ────────────────────────────────────────────────────────────────
   // Generates xl/worksheets/sheet1.xml — the core part of the workbook.
-
-  const COLS = 'ABCDEFGHI'; // column letter lookup by 0-based index
 
   // Rows 0 and 1 (brand + project name) have fixed heights in points.
   // All other rows use the default height, except product image rows (ht=60).
@@ -562,8 +618,10 @@ function buildXLSX(products, projectName) {
     `<col min="5" max="5" width="22" customWidth="1"/>` +
     `<col min="6" max="6" width="6"  customWidth="1"/>` +
     `<col min="7" max="7" width="8"  customWidth="1"/>` +
-    `<col min="8" max="8" width="16" customWidth="1"/>` +
-    `<col min="9" max="9" width="38" customWidth="1"/>` +
+    `<col min="8" max="8" width="16" customWidth="1"/>` + // H — Custo Unit.
+    `<col min="9" max="9" width="16" customWidth="1"/>` + // I — Subtotal
+    `<col min="10" max="10" width="38" customWidth="1"/>` +
+    `<col min="11" max="11" width="38" customWidth="1"/>` +
     `</cols><sheetData>`;
 
   rows.forEach((row, ri) => {
@@ -574,7 +632,9 @@ function buildXLSX(products, projectName) {
     const isData = dataEven.has(ri) || dataOdd.has(ri);
     const isSub  = subRows.has(ri);
 
-    const numCols = (isData || isSub) ? 9 : row.length;
+    // Linhas de dados e de subtotal emitem a largura completa para que as
+    // bordas apareçam mesmo nas células vazias; as demais só o que têm.
+    const numCols = (isData || isSub) ? NUM_COLS : row.length;
 
     if (!numCols) { sheetXml += `<row r="${ri+1}"${tall}/>`; return; }
     sheetXml += `<row r="${ri+1}"${tall}>`;
@@ -614,6 +674,28 @@ function buildXLSX(products, projectName) {
     merges.map(m => `<mergeCell ref="${m}"/>`).join('') +
     `</mergeCells></worksheet>`;
 
+  // ── Aba "código da extensão" — payload de importação ────────────────────────
+  // Gera o mesmo JSON que o botão "Compartilhar" baixa como .txt.
+  // Fica numa aba separada para que o usuário possa copiar e importar em outro
+  // computador diretamente a partir do Excel, sem precisar do arquivo .txt.
+  const sharePayload = JSON.stringify(
+    { _decorafit: 1, name: projectName, savedAt: new Date().toISOString(), products },
+    null, 2
+  );
+  // Excel caps a single cell at 32,767 characters. A very large project would
+  // overflow that limit and corrupt the workbook, so fall back to a notice and
+  // point the user to the unlimited .txt export ("Compartilhar") instead.
+  const codeCell = sharePayload.length > 32000
+    ? 'Projeto muito grande para exportar como código nesta aba. Use o botão "Compartilhar" na Biblioteca de Projetos para gerar o arquivo .txt e importá-lo no outro computador.'
+    : sharePayload;
+  const sheet2Xml =
+    `<?xml version="1.0" encoding="UTF-8"?>` +
+    `<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">` +
+    `<sheetData>` +
+    `<row r="1"><c r="A1" t="inlineStr"><is><t>${esc('Cole este código no botão "Importar Projeto" da extensão Decorafit para carregar esta lista em outro computador.')}</t></is></c></row>` +
+    `<row r="2"><c r="A2" t="inlineStr"><is><t>${esc(codeCell)}</t></is></c></row>` +
+    `</sheetData></worksheet>`;
+
   // ── OOXML namespace constants ────────────────────────────────────────────────
   const CT  = `http://schemas.openxmlformats.org/package/2006/content-types`;
   const PKG = `http://schemas.openxmlformats.org/package/2006/relationships`;
@@ -630,6 +712,7 @@ function buildXLSX(products, projectName) {
       `<Default Extension="xml"  ContentType="application/xml"/>` +
       `<Override PartName="/xl/workbook.xml"          ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>` +
       `<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>` +
+      `<Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>` +
       `<Override PartName="/xl/styles.xml"            ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>` +
       `</Types>`],
 
@@ -643,13 +726,14 @@ function buildXLSX(products, projectName) {
     ['xl/workbook.xml',
       `<?xml version="1.0" encoding="UTF-8"?>` +
       `<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="${DOC}">` +
-      `<sheets><sheet name="Orçamento" sheetId="1" r:id="rId1"/></sheets></workbook>`],
+      `<sheets><sheet name="Orçamento" sheetId="1" r:id="rId1"/><sheet name="código da extensão" sheetId="2" r:id="rId3"/></sheets></workbook>`],
 
     // xl/_rels/workbook.xml.rels — links the workbook to its sheet and styles parts
     ['xl/_rels/workbook.xml.rels',
       `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="${PKG}">` +
       `<Relationship Id="rId1" Type="${DOC}/worksheet" Target="worksheets/sheet1.xml"/>` +
       `<Relationship Id="rId2" Type="${DOC}/styles"    Target="styles.xml"/>` +
+      `<Relationship Id="rId3" Type="${DOC}/worksheet" Target="worksheets/sheet2.xml"/>` +
       `</Relationships>`],
 
     // xl/styles.xml — all formatting definitions.
@@ -658,11 +742,12 @@ function buildXLSX(products, projectName) {
     ['xl/styles.xml',
       `<?xml version="1.0" encoding="UTF-8"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">` +
       `<numFmts><numFmt numFmtId="164" formatCode="&quot;R$ &quot;#,##0.00"/></numFmts>` +
-      `<fonts count="4">` +
+      `<fonts count="5">` +
       `<font><sz val="11"/><name val="Calibri"/></font>` +
       `<font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font>` +
       `<font><b/><sz val="11"/><name val="Calibri"/></font>` +
       `<font><b/><sz val="18"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font>` +
+      `<font><sz val="11"/><color rgb="FFFF0000"/><name val="Calibri"/></font>` +
       `</fonts>` +
       `<fills count="13">` +
       `<fill><patternFill patternType="none"/></fill>` +
@@ -685,7 +770,7 @@ function buildXLSX(products, projectName) {
       `<border><left/><right/><top/><bottom style="medium"><color rgb="FFFF6633"/></bottom><diagonal/></border>` +
       `</borders>` +
       `<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>` +
-      `<cellXfs count="29">` +
+      `<cellXfs count="31">` +
       `<xf numFmtId="0"   fontId="0" fillId="0" borderId="0" xfId="0"/>` +
       `<xf numFmtId="0"   fontId="1" fillId="5" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"><alignment horizontal="center" wrapText="1"/></xf>` +
       `<xf numFmtId="0"   fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/>` +
@@ -715,9 +800,14 @@ function buildXLSX(products, projectName) {
       `<xf numFmtId="0"   fontId="1" fillId="10" borderId="0" xfId="0" applyFont="1" applyFill="1"><alignment vertical="center"/></xf>` +
       `<xf numFmtId="0"   fontId="1" fillId="11" borderId="0" xfId="0" applyFont="1" applyFill="1"><alignment vertical="center"/></xf>` +
       `<xf numFmtId="0"   fontId="1" fillId="12" borderId="0" xfId="0" applyFont="1" applyFill="1"><alignment vertical="center"/></xf>` +
+      `<xf numFmtId="164" fontId="4" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyFont="1" applyBorder="1"/>` +
+      `<xf numFmtId="164" fontId="4" fillId="4" borderId="1" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1"/>` +
       `</cellXfs></styleSheet>`],
 
     // xl/worksheets/sheet1.xml — the sheet data built above
     ['xl/worksheets/sheet1.xml', sheetXml],
+
+    // xl/worksheets/sheet2.xml — código de importação da extensão
+    ['xl/worksheets/sheet2.xml', sheet2Xml],
   ]);
 }

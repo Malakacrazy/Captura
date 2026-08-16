@@ -1,102 +1,238 @@
-// background.js v2 — Decorafit FF&E
+// background.js v3 — Decorafit FF&E
 
 // ---------------------------------------------------------------------------
-// SERVICE WORKER OVERVIEW (Manifest V3)
+// VISÃO GERAL DO SERVICE WORKER (Manifest V3)
 // ---------------------------------------------------------------------------
-// In MV3, background pages are replaced by service workers. This script runs
-// in a sandboxed, event-driven context — it is not a persistent page. Chrome
-// spins it up when an event fires and tears it down when idle, so no state
-// should be stored in module-level variables; chrome.storage is the correct
-// persistence layer. All side-effects must be initiated inside event handlers.
+// No MV3 a background page foi substituída pelo service worker: um contexto
+// orientado a eventos, não persistente. O Chrome o inicia quando um evento
+// dispara e o encerra quando fica ocioso, então nada de estado em variáveis de
+// módulo — chrome.storage é a camada de persistência correta.
+//
+// Além do ciclo de vida, este worker é o ORQUESTRADOR DA CAPTURA. Tanto o botão
+// flutuante (content.js) quanto o botão "⊕ Capturar" (popup.js) delegam a
+// captura para cá, o que garante que os dois caminhos produzam exatamente o
+// mesmo resultado. Antes cada um tinha sua própria cópia da raspagem, e as
+// cópias já haviam divergido.
 // ---------------------------------------------------------------------------
+
+// Taxonomia compartilhada: DECORAFIT_CATEGORIES e decorafitGuessCategory().
+// A classificação roda AQUI, fora da página, sobre as strings já extraídas.
+importScripts('categories.js');
 
 
 // ---------------------------------------------------------------------------
-// STORAGE INITIALISATION ON INSTALL / UPDATE
+// INICIALIZAÇÃO DO STORAGE NA INSTALAÇÃO / ATUALIZAÇÃO
 // ---------------------------------------------------------------------------
-// onInstalled fires on three occasions:
-//   1. First install of the extension.
-//   2. The extension is updated to a new version.
-//   3. Chrome itself is updated (rare, browser-restart triggered).
-// We use it as the one safe place to guarantee our storage keys exist before
-// any other code (popup, content script) tries to read them.
+// onInstalled dispara na primeira instalação, em cada atualização da extensão e
+// (raramente) quando o próprio Chrome é atualizado. É o único lugar seguro para
+// garantir que as chaves existam antes de qualquer leitura.
 chrome.runtime.onInstalled.addListener(() => {
-
-  // Read all three keys in a single storage.get call so we can inspect the
-  // existing values before deciding whether to write anything. This is
-  // intentionally non-destructive: we only set a key when it is absent (i.e.
-  // undefined / falsy), which means a user's saved data survives an extension
-  // update. If we called storage.set unconditionally, every update would wipe
-  // the user's product list and project name.
+  // Lemos as três chaves de uma vez para inspecionar antes de escrever. A
+  // escrita é condicional de propósito: gravar incondicionalmente apagaria a
+  // lista de produtos e os projetos do usuário a cada atualização.
   chrome.storage.local.get(['products', 'projectName', 'projects'], (data) => {
+    // Arrays default para que o resto do código possa chamar .push()/.filter()
+    // sem checagem de null; string vazia para interpolação segura em templates.
+    if (!data.products)    chrome.storage.local.set({ products: [] });
+    if (!data.projectName) chrome.storage.local.set({ projectName: '' });
+    if (!data.projects)    chrome.storage.local.set({ projects: [] });
+  });
 
-    // 'products' holds the array of captured FF&E items for the current
-    // project. Default to an empty array so downstream code can always call
-    // .push() / .filter() without a null-check.
-    if (!data.products)     chrome.storage.local.set({ products: [] });
+  // Reinjeta o content script nas abas JÁ ABERTAS.
+  //
+  // Por padrão, o Chrome só injeta content scripts em páginas carregadas DEPOIS
+  // que a extensão é instalada/atualizada. Sem isto, logo após uma atualização o
+  // atalho Ctrl+. dispara, o service worker envia a mensagem, mas as abas antigas
+  // não têm o content script para recebê-la — e os botões não aparecem até dar
+  // F5 em cada aba. Injetar aqui faz o atalho funcionar imediatamente nas abas
+  // que já estavam abertas.
+  reinjectContentScripts();
+});
 
-    // 'projectName' is the human-readable label shown in the popup header and
-    // on the print sheet. Default to an empty string rather than null so UI
-    // code can safely interpolate it into template literals.
-    if (!data.projectName)  chrome.storage.local.set({ projectName: '' });
+// Injeta content.css + content.js em todas as abas http/https abertas.
+// Páginas restritas (chrome://, Web Store, PDF, about:) recusam a injeção; o
+// try/catch por aba absorve essas falhas sem interromper as demais.
+async function reinjectContentScripts() {
+  const tabs = await chrome.tabs.query({ url: ['http://*/*', 'https://*/*'] });
+  for (const tab of tabs) {
+    if (!tab.id) continue;
+    try {
+      await chrome.scripting.insertCSS({ target: { tabId: tab.id }, files: ['content.css'] });
+      await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['content.js'] });
+    } catch {
+      // Aba em página restrita ou descarregada — ignora e segue para a próxima
+    }
+  }
+}
 
-    // 'projects' is the array of saved project snapshots used by the library
-    // view. Initialised to an empty array for the same safe-iteration reason
-    // as 'products'.
-    if (!data.projects)     chrome.storage.local.set({ projects: [] });
+
+// ---------------------------------------------------------------------------
+// CAPTURA DE PRODUTO
+// ---------------------------------------------------------------------------
+
+// Injeta extractor.js e roda a extração, repetindo até a página hidratar.
+//
+// Vitrines SPA (VTEX: Leroy Merlin, Tok&Stok, ABC da Construção) entregam um
+// HTML vazio e só injetam nome, preço e JSON-LD depois, via JavaScript. Uma
+// única tentativa logo após o clique pode não ver nada.
+//
+// A injeção é feita no MUNDO PRINCIPAL (world: 'MAIN') porque o fallback de
+// preço da VTEX lê window.__STATE__, que pertence à página e é invisível do
+// mundo isolado dos content scripts.
+//
+// Critérios de parada, em ordem:
+//   • nome + preço > 0            → captura completa, retorna na hora
+//   • nome estável em 3 leituras  → a página já hidratou e o produto realmente
+//                                   não tem preço (esgotado, "sob consulta");
+//                                   não adianta continuar esperando
+//   • esgotou as tentativas       → devolve o melhor resultado obtido
+//
+// A parada por estabilidade é o que evita gastar os ~2 s inteiros em todo
+// produto sem preço, como acontecia na versão anterior (12 × 300 ms fixos).
+async function extractWithRetry(tabId, { attempts = 8, delay = 250 } = {}) {
+  // Define __decorafitExtract__ na página. Reinjetar é inofensivo: o arquivo só
+  // contém uma function declaration, que pode ser redeclarada sem erro.
+  await chrome.scripting.executeScript({
+    target: { tabId },
+    files:  ['extractor.js'],
+    world:  'MAIN'
+  });
+
+  let best = null;
+  let stableName = null;
+  let stableCount = 0;
+
+  for (let i = 0; i < attempts; i++) {
+    const results = await chrome.scripting.executeScript({
+      target: { tabId },
+      func:   () => __decorafitExtract__(),
+      world:  'MAIN'
+    });
+    const d = results?.[0]?.result;
+
+    if (d?.name) {
+      if (d.price > 0) return d;   // captura completa
+
+      best = best || d;            // guarda o primeiro resultado só com nome
+
+      // Nome repetido entre leituras = página estabilizou
+      if (d.name === stableName) {
+        if (++stableCount >= 2) return best;
+      } else {
+        stableName  = d.name;
+        stableCount = 0;
+      }
+    }
+
+    await new Promise(r => setTimeout(r, delay));
+  }
+
+  return best; // melhor esforço: nome sem preço, ou null se nada foi achado
+}
+
+// Captura o produto da aba, classifica e adiciona ao orçamento em andamento.
+//
+// Concentrar a escrita aqui (em vez de deixar cada chamador gravar) garante
+// que a deduplicação e a geração de id valham para os dois botões de captura.
+async function captureProduct(tabId) {
+  const d = await extractWithRetry(tabId);
+  if (!d?.name) return { ok: false, reason: 'not-found' };
+
+  const { products = [] } = await chrome.storage.local.get('products');
+
+  // Deduplicação por URL: recapturar a mesma página soma na quantidade em vez
+  // de criar uma segunda linha idêntica no orçamento.
+  const existing = d.url && products.find(p => p.url === d.url);
+  if (existing) {
+    existing.qty = (existing.qty || 1) + 1;
+    await chrome.storage.local.set({ products });
+    return { ok: true, deduped: true, name: existing.name, qty: existing.qty };
+  }
+
+  const category = decorafitGuessCategory(d.name, d.siteCategory);
+
+  // crypto.randomUUID() em vez de Date.now(): duas capturas no mesmo
+  // milissegundo geravam ids iguais, e como a remoção filtra por id
+  // (products.filter(x => x.id !== id)), apagar um item apagava os dois.
+  products.push({
+    id:       crypto.randomUUID(),
+    name:     d.name,
+    brand:    d.brand || '',
+    sku:      d.sku   || '',
+    price:    d.price || 0,
+    qty:      1,
+    category,
+    img:      d.img   || '',
+    dims:     d.dims  || '',
+    url:      d.url   || '',
+    unit:     d.unit  || ''
+  });
+
+  await chrome.storage.local.set({ products });
+
+  const label = DECORAFIT_CATEGORIES.find(c => c.id === category)?.label || 'Outros';
+  return { ok: true, deduped: false, name: d.name, category, categoryLabel: label };
+}
+
+
+// ---------------------------------------------------------------------------
+// ATALHO DE TECLADO — mostrar/ocultar os botões flutuantes
+// ---------------------------------------------------------------------------
+// Comandos declarados no manifest são capturados pelo Chrome no nível do
+// navegador, antes de qualquer JavaScript da página poder interceptá-los.
+// Repassamos o evento ao content script da aba ativa por mensagem.
+chrome.commands.onCommand.addListener((command) => {
+  if (command !== 'toggle-fab') return;
+  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    const id = tabs[0]?.id;
+    if (!id) return;
+    // A aba pode não ter content script (chrome://, Web Store, PDF). O callback
+    // vazio + leitura de lastError evitam o "Unchecked runtime.lastError" no
+    // console do service worker.
+    chrome.tabs.sendMessage(id, { action: 'toggleFab' }, () => void chrome.runtime.lastError);
   });
 });
 
 
 // ---------------------------------------------------------------------------
-// MESSAGE HANDLER — inter-page communication
+// MENSAGENS — comunicação entre content script e páginas da extensão
 // ---------------------------------------------------------------------------
-// Content scripts and extension pages (popup, library, print) communicate
-// with this service worker via chrome.runtime.sendMessage. The listener
-// receives every message and dispatches on msg.action.
-//
-// The second parameter (_sender) carries metadata about the sending context
-// (tab id, frame id, etc.). It is prefixed with _ to signal intentionally
-// unused — we don't need to know who sent the message for either action here.
-chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+// Retornar `true` de um listener onMessage é o contrato do MV3 para avisar o
+// Chrome que sendResponse será chamado de forma assíncrona. Sem isso o canal é
+// fechado assim que o listener retorna e a resposta se perde em silêncio.
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
-  // --- openPrint -----------------------------------------------------------
-  // Opens the extension's print preview page (print.html) in a new tab.
-  // Only the background service worker can call chrome.tabs.create; content
-  // scripts and most extension pages do not have the "tabs" permission scope
-  // needed to create tabs, so they delegate the work here via messaging.
-  if (msg.action === 'openPrint') {
+  // --- captureProduct ------------------------------------------------------
+  // Chamado pelo botão flutuante (sem tabId — usamos a aba de origem) e pelo
+  // botão "⊕ Capturar" do popup (que informa a aba ativa explicitamente,
+  // porque o popup não roda dentro de uma aba de conteúdo).
+  if (msg.action === 'captureProduct') {
+    const tabId = msg.tabId ?? sender.tab?.id;
+    if (!tabId) { sendResponse({ ok: false, reason: 'no-tab' }); return; }
 
-    // chrome.runtime.getURL converts a relative extension path into its fully
-    // qualified chrome-extension://<id>/print.html URL. Using getURL instead
-    // of hard-coding the URL means the correct extension ID is always resolved
-    // at runtime, regardless of whether the extension is packed or unpacked.
-    const url = chrome.runtime.getURL('print.html');
-
-    // Create the new tab and, once Chrome confirms it is open, reply with the
-    // tab id so the caller can optionally focus or communicate with that tab.
-    chrome.tabs.create({ url }, tab => sendResponse({ ok: true, tabId: tab.id }));
-
-    // Returning true from an onMessage listener is the MV3 signal to Chrome
-    // that sendResponse will be called asynchronously (inside the tabs.create
-    // callback above). Without this return value, Chrome closes the message
-    // channel immediately after the synchronous listener returns, and the
-    // subsequent sendResponse call silently fails.
+    captureProduct(tabId)
+      .then(sendResponse)
+      // executeScript falha em páginas onde a extensão não pode injetar
+      // (chrome://, Chrome Web Store, visualizador de PDF, arquivos locais sem
+      // permissão). Devolvemos o motivo para o chamador mostrar um aviso útil.
+      .catch(err => sendResponse({ ok: false, reason: 'blocked', message: String(err?.message || err) }));
     return true;
   }
 
-  // --- openLibrary ---------------------------------------------------------
-  // Mirrors openPrint but targets library.html — the saved-projects browser.
-  // The same async-channel contract applies, so we return true here too.
-  if (msg.action === 'openLibrary') {
-    const url = chrome.runtime.getURL('library.html');
-    chrome.tabs.create({ url }, tab => sendResponse({ ok: true, tabId: tab.id }));
-    return true;
-  }
-
-  if (msg.action === 'openPopup') {
-    const url = chrome.runtime.getURL('popup.html');
-    chrome.tabs.create({ url }, tab => sendResponse({ ok: true, tabId: tab.id }));
+  // --- Abertura de páginas da extensão -------------------------------------
+  // Só o service worker pode chamar chrome.tabs.create com segurança em todos
+  // os contextos, então os demais delegam aqui.
+  const PAGES = {
+    openPrint:   'print.html',
+    openLibrary: 'library.html',
+    openPopup:   'popup.html'
+  };
+  const page = PAGES[msg.action];
+  if (page) {
+    // getURL resolve o chrome-extension://<id>/… correto em tempo de execução,
+    // funcionando tanto com a extensão empacotada quanto descompactada.
+    chrome.tabs.create({ url: chrome.runtime.getURL(page) },
+      tab => sendResponse({ ok: true, tabId: tab.id }));
     return true;
   }
 });

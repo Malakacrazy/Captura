@@ -175,6 +175,9 @@
     .cat-line { height: 1px; opacity: 0.35; }
 
     /* Table */
+    /* 6 colunas: imagem | Produto | Ambiente | Observações | Qtd | Subtotal.
+     * O custo unitário fica só no Excel — no PDF ele apertava demais as colunas.
+     * grid-template-columns aqui e em .table-row precisam ser idênticos. */
     .table-header {
       display: grid;
       grid-template-columns: 52px 1fr 90px 90px 50px 90px;
@@ -273,10 +276,18 @@
       background: linear-gradient(90deg, var(--duna) 0%, var(--cacau) 50%, var(--ferrugem) 100%);
     }
 
-    /* Evitar quebras no meio de linhas e seções */
-    .table-row   { page-break-inside: avoid; break-inside: avoid; }
-    .cat-section { page-break-inside: avoid; break-inside: avoid; }
-    .cat-header  { page-break-after:  avoid; break-after:  avoid; }
+    /* ── Quebras de página ────────────────────────────────────────────────
+     * A linha do produto é a única coisa que nunca deve ser partida ao meio.
+     *
+     * IMPORTANTE: .cat-section NÃO pode levar break-inside:avoid. Uma disciplina
+     * com muitos itens é mais alta que uma página A4; ao proibir a quebra dentro
+     * dela, o navegador é forçado a quebrar assim mesmo e acaba CORTANDO as
+     * linhas excedentes. Deixamos a seção quebrar livremente e protegemos só o
+     * que precisa: a linha individual e os cabeçalhos, que não podem ficar
+     * órfãos no rodapé de uma página. */
+    .table-row    { page-break-inside: avoid; break-inside: avoid; }
+    .cat-header   { page-break-after:  avoid; break-after:  avoid; }
+    .table-header { page-break-after:  avoid; break-after:  avoid; }
 
     /* Print media */
     @media print {
@@ -284,30 +295,32 @@
       .print-bar { display: none; }
       .page { margin: 0; width: 100%; box-shadow: none; min-height: auto; }
 
+      /* Rodapé em FLUXO NORMAL — aparece uma vez, ao fim do documento.
+       *
+       * Antes ele era position:fixed, o que o repetia no pé de TODA página e o
+       * fazia sobrepor a última linha de cada página (o rodapé "comia" o item).
+       * Em fluxo normal isso não acontece: o conteúdo termina, o rodapé vem
+       * depois, e não há sobreposição possível. break-inside:avoid impede que o
+       * próprio rodapé seja partido entre duas páginas. */
       .footer {
-        position: fixed;
-        bottom: 0;
-        left: 0;
-        right: 0;
         padding: 14px 52px 18px;
         background: #fff;
         border-top: 1px solid var(--areia);
-      }
-      .accent-bottom {
-        position: fixed;
-        bottom: 0;
-        left: 0;
-        right: 0;
-        height: 4px;
+        break-inside: avoid;
+        page-break-inside: avoid;
       }
 
       /* Reserva espaço no fundo de cada página para o footer fixo */
+      /* Margens uniformes e modestas. O grande espaço de 28mm no rodapé só
+       * existia para reservar lugar ao rodapé fixo, que agora flui no conteúdo.
+       * As laterais ficam em 0 porque o próprio conteúdo já tem 52px de padding
+       * horizontal, que forma a margem visual. */
       @page {
         size: A4;
-        margin: 14mm 0 28mm;
+        margin: 12mm 0;
       }
       @page :first {
-        margin: 0 0 28mm;
+        margin: 0 0 12mm;
       }
     }
   </style>
@@ -329,7 +342,7 @@
     <!-- Header -->
     <header class="header">
       <div class="logo-block">
-        <img src="icons/logo-horizontal.png" class="logo-img" alt="Decorafit"/>
+        <img src="logo-horizontal.png" class="logo-img" alt="Decorafit"/>
       </div>
       <div class="doc-info">
         <div class="doc-eyebrow">Documento</div>
@@ -379,13 +392,15 @@
         Gerado por Decorafit · Tecnologia em Reformas.
       </div>
       <div>
-        <img src="icons/logo-horizontal.png" class="footer-logo" alt="Decorafit"/>
+        <img src="logo-horizontal.png" class="footer-logo" alt="Decorafit"/>
       </div>
     </footer>
 
     <div class="accent-bottom"></div>
   </div>
 
+  <!-- categories.js define DECORAFIT_CATEGORIES; precisa vir antes -->
+  <script src="categories.js"></script>
   <script src="print.js"></script>
 </body>
 </html>

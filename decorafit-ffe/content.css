@@ -20,6 +20,11 @@
    ========================================================================== */
 
 #sa-fab {
+  /* Hidden by default — JS reads fabVisible from storage and shows if true.
+   * Defining display:none here (in CSS) prevents a flash where the button
+   * appears briefly before the async storage read completes. */
+  display: none;
+
   /* --- Positioning --------------------------------------------------------
    * position:fixed removes the element from the normal document flow and
    * anchors it to the viewport, not the page. This means the button stays
@@ -38,9 +43,9 @@
   z-index: 2147483647;
 
   /* --- Layout -------------------------------------------------------------
-   * flex + align-items:center keeps the icon SVG and the button label text
-   * vertically centred relative to each other as a single inline row. */
-  display: flex;
+   * display:flex is applied via JS inline style (applyFabVisibility).
+   * Only align-items and gap are declared here; display itself stays as
+   * the none default above until JS explicitly sets it to flex. */
   align-items: center;
   gap: 8px; /* space between the icon and the label text */
 
@@ -128,16 +133,24 @@
   pointer-events: none;
 }
 
+
+/* ==========================================================================
+   TOAST NOTIFICATION — #sa-toast
+   ========================================================================== */
+
 /* ==========================================================================
    OPEN PROJECT BUTTON — #sa-fab-lib
    ========================================================================== */
 
 #sa-fab-lib {
+  /* Hidden by default — same reasoning as #sa-fab above */
+  display: none;
+
   position: fixed;
   bottom: 24px;
   right: 180px;
   z-index: 2147483647;
-  display: flex;
+  /* display:flex applied by JS inline style — same pattern as #sa-fab */
   align-items: center;
   gap: 6px;
   padding: 11px 16px;
@@ -165,6 +178,7 @@
   transform: translateY(0) scale(0.97);
 }
 
+
 /* ==========================================================================
    POPUP IFRAME OVERLAY — #sa-popup-frame
    ========================================================================== */
@@ -179,11 +193,9 @@
   border: none;
   border-radius: 12px;
   box-shadow: 0 12px 48px rgba(0,0,0,0.3), 0 2px 8px rgba(0,0,0,0.12);
-  background: #fff;}
+  background: #fff;
+}
 
-/* ==========================================================================
-   TOAST NOTIFICATION — #sa-toast
-   ========================================================================== */
 
 #sa-toast {
   /* Anchored to the viewport like the FAB, positioned directly above it.
