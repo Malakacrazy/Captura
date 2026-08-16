@@ -1,32 +1,43 @@
-// popup.js v2 — Studio Araci FF&E
+// popup.js v3 — Studio Araci FF&E
+//
+// Controla o popup da extensão (o painel que abre ao clicar no ícone da barra
+// de ferramentas): lista de produtos, entrada manual, botão de captura, filtro
+// por categoria e navegação para as páginas de PDF e Biblioteca.
+//
+// A raspagem NÃO mora mais aqui. Este arquivo tinha uma cópia inteira do
+// extrator, espelhando a de content.js, e as duas já haviam divergido. Hoje a
+// captura é delegada a background.js, que injeta extractor.js — implementação
+// única para os dois botões.
 
+// Atalho para document.getElementById, usado o tempo todo
 const $ = id => document.getElementById(id);
 
-const CATEGORIES = [
-  { id: 'revestimentos', label: 'Revestimentos' },
-  { id: 'loucas-metais', label: 'Louças e Metais' },
-  { id: 'iluminacao',    label: 'Iluminação' },
-  { id: 'eletros',      label: 'Eletros' },
-  { id: 'moveis',      label: 'Movéis' },
-  { id: 'decoracao-enxoval',      label: 'Decoração e Enxoval' },
-  { id: 'outros',       label: 'Outros' }
-];
+// Categorias vêm de categories.js (carregado antes deste script em popup.html),
+// a mesma fonte usada por background.js e print.js.
+const CATEGORIES = STUDIO_ARACI_CATEGORIES;
 
-let products = [];
-let projectName = '';
-let activeFilter = 'all';
-let statusTimer = null;
+// Module-level state — the popup is a single-page UI that re-renders from these
+let products = [];    // full product array loaded from storage
+let projectName = '';    // current budget name, synced to the input field
+let activeFilter = 'all'; // which category tab is selected ('all' or a category id)
+let statusTimer = null; // handle for the status bar auto-hide timeout
 
-// ─── Utilities ─────────────────────────────────────────────────────────────
+// ─── Utilities ───────────────────────────────────────────────────────────────
 
+// Formats a number as Brazilian currency: "R$ 1.234,56"
 function fmt(n) {
   return 'R$ ' + (n || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+// Persists the current products and projectName to chrome.storage.local.
+// Returns the Promise so callers can await the write before rendering.
 function save() {
   return chrome.storage.local.set({ products, projectName });
 }
 
+// Shows a temporary status bar message and auto-hides after `duration` ms.
+// clearTimeout before setting ensures only the latest call's timer runs —
+// rapid successive calls won't stack multiple hide timers.
 function showStatus(msg, type = 'ok', duration = 2800) {
   const bar = $('statusBar');
   bar.textContent = msg;
@@ -35,25 +46,29 @@ function showStatus(msg, type = 'ok', duration = 2800) {
   statusTimer = setTimeout(() => { bar.className = 'status-bar'; }, duration);
 }
 
-// ─── Init ──────────────────────────────────────────────────────────────────
+// ─── Init ────────────────────────────────────────────────────────────────────
 
+// Loads persisted data and renders the UI. Called once on popup open.
 async function init() {
   const data = await chrome.storage.local.get(['products', 'projectName']);
   products = data.products || [];
   projectName = data.projectName || '';
-  $('projectName').value = projectName;
+  $('projectName').value = projectName; // pre-fill the name input
   render();
 }
 
-// ─── Render ────────────────────────────────────────────────────────────────
+// ─── Render ──────────────────────────────────────────────────────────────────
 
+// Rebuilds the product list in the DOM from current state.
+// Only removes existing .product-item rows — not the entire list — so that
+// static elements (empty-state placeholder, etc.) are preserved.
 function render() {
   const list = $('productList');
   const empty = $('emptyState');
 
-  // Remove old rows
   list.querySelectorAll('.product-item').forEach(el => el.remove());
 
+  // Apply the active category filter. 'all' shows every product.
   const visible = activeFilter === 'all'
     ? products
     : products.filter(p => p.category === activeFilter);
@@ -61,30 +76,38 @@ function render() {
   if (visible.length === 0) {
     empty.style.display = '';
     $('generateBtn').disabled = true;
-    $('prodCount').textContent = products.length;
-    $('totalValue').textContent = fmt(0);
+    // Contagem e total seguem refletindo o orçamento inteiro, mesmo com um
+    // filtro vazio na tela — antes o total zerava aqui, dando a impressão de
+    // que o orçamento tinha se perdido ao clicar numa categoria sem itens.
+    refreshTotals();
     return;
   }
 
   empty.style.display = 'none';
   $('generateBtn').disabled = false;
 
-  let total = 0;
-  visible.forEach(p => {
-    total += (p.price || 0) * (p.qty || 1);
-    list.appendChild(buildRow(p));
-  });
+  visible.forEach(p => list.appendChild(buildRow(p)));
 
+  refreshTotals();
+}
+
+// Contagem e total do rodapé. Extraído de render() para que alterar a
+// quantidade digitando possa atualizar o rodapé sem redesenhar a lista —
+// redesenhar tiraria o foco do campo no meio da digitação.
+// Os números sempre refletem TODOS os produtos, não apenas o filtro ativo.
+function refreshTotals() {
   $('prodCount').textContent = products.length;
   $('totalValue').textContent = fmt(products.reduce((s, p) => s + (p.price || 0) * (p.qty || 1), 0));
 }
 
+// Builds a single product row DOM element.
+// Each row has: thumbnail | product info + category badge | price + qty controls
 function buildRow(p) {
   const item = document.createElement('div');
   item.className = 'product-item';
-  item.dataset.id = p.id;
+  item.dataset.id = p.id; // stored for potential future lookup by id
 
-  // Image
+  // ── Thumbnail ──
   const imgWrap = document.createElement('div');
   imgWrap.className = 'prod-img-wrap';
 
@@ -92,6 +115,8 @@ function buildRow(p) {
     const img = document.createElement('img');
     img.src = p.img;
     img.alt = p.name;
+    // Replace broken images with an emoji placeholder; using onerror here is
+    // acceptable in a trusted extension context (not a public web page)
     img.onerror = () => {
       imgWrap.removeChild(img);
       imgWrap.textContent = '📦';
@@ -104,20 +129,34 @@ function buildRow(p) {
     imgWrap.style.color = '#CDB8A3';
   }
 
-  // Body
+  // ── Product info ──
   const body = document.createElement('div');
   body.className = 'prod-body';
 
-  const name = document.createElement('div');
+  // Render the title as a link to the source page when a URL was captured,
+  // otherwise as a plain div. The anchor keeps the same colour (see CSS) and
+  // opens the store page in a new tab.
+  const name = document.createElement(p.url ? 'a' : 'div');
   name.className = 'prod-name';
-  name.title = p.name;
   name.textContent = p.name;
+  if (p.url) {
+    name.href = p.url;
+    name.target = '_blank';
+    name.rel = 'noopener noreferrer';
+    name.title = p.url; // show the destination on hover
+  } else {
+    name.title = p.name; // full name as tooltip in case it's truncated by CSS
+  }
 
+  // Secondary line: "Brand · SKU 12345" — only shows fields that exist
   const meta = document.createElement('div');
   meta.className = 'prod-meta';
   meta.textContent = [p.brand, p.sku ? 'SKU ' + p.sku : ''].filter(Boolean).join(' · ');
 
-  // Category badge + select
+  // ── Category badge + inline select ──
+  // The category badge is the default display state. Clicking it hides the badge
+  // and shows a <select> in its place. On change the new category is saved and
+  // the list re-renders to update the badge label and colour.
   const catWrap = document.createElement('div');
   catWrap.className = 'prod-cat-wrap';
 
@@ -135,6 +174,7 @@ function buildRow(p) {
     sel.appendChild(opt);
   });
 
+  // Show select when badge is clicked
   badge.addEventListener('click', () => {
     badge.classList.add('hidden');
     badge.style.display = 'none';
@@ -142,15 +182,19 @@ function buildRow(p) {
     sel.focus();
   });
 
+  // Save category change and re-render to reflect the new badge label/colour
   sel.addEventListener('change', async () => {
     const idx = products.findIndex(x => x.id === p.id);
     if (idx !== -1) {
       products[idx].category = sel.value;
       await save();
-      render(); // re-render to update badge
+      render();
     }
   });
 
+  // When the select loses focus without a change, restore the badge display.
+  // setTimeout 0 defers the restore slightly so the change event fires first
+  // if the user clicked another option (blur fires before change on some browsers).
   sel.addEventListener('blur', () => {
     sel.classList.remove('visible');
     badge.style.display = '';
@@ -159,10 +203,11 @@ function buildRow(p) {
   catWrap.append(badge, sel);
   body.append(name, meta, catWrap);
 
-  // Right side: price + controls
+  // ── Price + qty controls ──
   const right = document.createElement('div');
   right.className = 'prod-right';
 
+  // Display the line total (unit price × qty)
   const price = document.createElement('div');
   price.className = 'prod-price';
   price.textContent = fmt((p.price || 0) * (p.qty || 1));
@@ -175,9 +220,15 @@ function buildRow(p) {
   decBtn.textContent = '−';
   decBtn.title = 'Diminuir quantidade';
 
-  const qtySpan = document.createElement('span');
-  qtySpan.className = 'qty-val';
-  qtySpan.textContent = p.qty || 1;
+  // Campo digitável para lançar quantidades grandes de uma vez, em vez de
+  // clicar em + dezenas de vezes. Os botões continuam para o ajuste fino.
+  const qtyInput = document.createElement('input');
+  qtyInput.type = 'number';
+  qtyInput.className = 'qty-val';
+  qtyInput.min = '1';
+  qtyInput.step = '1';
+  qtyInput.value = p.qty || 1;
+  qtyInput.title = 'Quantidade';
 
   const incBtn = document.createElement('button');
   incBtn.className = 'qty-btn';
@@ -189,35 +240,55 @@ function buildRow(p) {
   delBtn.title = 'Remover';
   delBtn.textContent = '×';
 
-  decBtn.addEventListener('click', async () => {
+  // Altera a quantidade e atualiza só o que mudou na tela (preço da linha e
+  // rodapé), sem redesenhar a lista — um render() completo tiraria o foco do
+  // campo no meio da digitação.
+  // Somente inteiros: 2,5 vira 2; qualquer coisa inválida vira 1.
+  // `refletir` diz se o valor normalizado volta para dentro do campo — durante
+  // a digitação não mexemos nele para não atrapalhar o cursor.
+  const setQty = (valor, refletir) => {
     const idx = products.findIndex(x => x.id === p.id);
     if (idx === -1) return;
-    products[idx].qty = Math.max(1, (products[idx].qty || 1) - 1);
-    await save(); render();
-  });
+    const q = Math.max(1, Math.floor(valor) || 1);
+    products[idx].qty = q;
+    p.qty = q;
+    if (refletir) qtyInput.value = q;
+    price.textContent = fmt((p.price || 0) * q);
+    refreshTotals();
+    save();
+  };
 
-  incBtn.addEventListener('click', async () => {
-    const idx = products.findIndex(x => x.id === p.id);
-    if (idx === -1) return;
-    products[idx].qty = (products[idx].qty || 1) + 1;
-    await save(); render();
+  // Só aceitamos valores já válidos enquanto digita: sem isso, apagar o "1"
+  // para escrever "40" faria o campo se reescrever como 1 a cada tecla.
+  qtyInput.addEventListener('input', () => {
+    const v = parseInt(qtyInput.value, 10);
+    if (Number.isFinite(v) && v >= 1) setQty(v, false);
   });
+  // Ao sair do campo, normaliza e devolve o valor final para a tela
+  qtyInput.addEventListener('change', () => setQty(parseInt(qtyInput.value, 10), true));
+  qtyInput.addEventListener('keydown', e => { if (e.key === 'Enter') qtyInput.blur(); });
 
+  decBtn.addEventListener('click', () => setQty((p.qty || 1) - 1, true));
+  incBtn.addEventListener('click', () => setQty((p.qty || 1) + 1, true));
+
+  // Filter returns a new array so the module-level reference is replaced atomically
   delBtn.addEventListener('click', async () => {
     products = products.filter(x => x.id !== p.id);
     await save(); render();
   });
 
-  controls.append(decBtn, qtySpan, incBtn, delBtn);
+  controls.append(decBtn, qtyInput, incBtn, delBtn);
   right.append(price, controls);
   item.append(imgWrap, body, right);
   return item;
 }
 
-// ─── Category tabs ─────────────────────────────────────────────────────────
+// ─── Category tabs ────────────────────────────────────────────────────────────
 
+// Event delegation: listen on the container instead of each tab so dynamically
+// added tabs work and we avoid attaching N separate listeners.
 $('catTabs').addEventListener('click', e => {
-  const tab = e.target.closest('.cat-tab');
+  const tab = e.target.closest('.cat-tab'); // handles clicks on child spans/icons
   if (!tab) return;
   document.querySelectorAll('.cat-tab').forEach(t => t.classList.remove('active'));
   tab.classList.add('active');
@@ -225,41 +296,47 @@ $('catTabs').addEventListener('click', e => {
   render();
 });
 
-// ─── Project name ──────────────────────────────────────────────────────────
+// ─── Project name ─────────────────────────────────────────────────────────────
 
+// Auto-save on every keystroke so the name is never lost if the popup closes
 $('projectName').addEventListener('input', async e => {
   projectName = e.target.value;
   await save();
 });
 
-// ─── Toggle add form ───────────────────────────────────────────────────────
+// ─── Manual product add form ──────────────────────────────────────────────────
 
+// Toggle the add-product form panel open/closed; auto-focus the name field on open
 $('toggleAddBtn').addEventListener('click', () => {
   $('addForm').classList.toggle('open');
   if ($('addForm').classList.contains('open')) $('f-name').focus();
 });
 
-// ─── Add manual product ────────────────────────────────────────────────────
-
 $('addManualBtn').addEventListener('click', async () => {
-  const name  = $('f-name').value.trim();
+  const name = $('f-name').value.trim();
   if (!name) { showStatus('⚠ Informe o nome do produto', 'warn'); $('f-name').focus(); return; }
 
   const brand = $('f-brand').value.trim();
-  const sku   = $('f-sku').value.trim();
-  const price = parseFloat($('f-price').value) || 0;
-  const qty   = Math.max(1, parseInt($('f-qty').value) || 1);
+  const sku = $('f-sku').value.trim();
+  const price = parseFloat($('f-price').value) || 0;       // NaN-safe default
+  const qty = Math.max(1, parseInt($('f-qty').value) || 1); // floor at 1
   const category = $('f-cat').value;
 
-  products.push({ id: Date.now(), name, brand, sku, price, qty, category, img: '', dims: '', url: '' });
+  const unit = $('f-unit').value.trim();
+  // crypto.randomUUID() em vez de Date.now(): dois itens criados no mesmo
+  // milissegundo recebiam o mesmo id, e como a exclusão filtra por id, remover
+  // um deles removia os dois.
+  products.push({ id: crypto.randomUUID(), name, brand, sku, price, qty, category, img: '', dims: '', url: '', unit });
   await save();
 
+  // Clear the form fields for the next entry
   $('f-name').value = ''; $('f-brand').value = ''; $('f-sku').value = '';
-  $('f-price').value = ''; $('f-qty').value = '1';
+  $('f-price').value = ''; $('f-qty').value = '1'; $('f-unit').value = '';
 
   showStatus('✓ Produto adicionado', 'ok');
 
-  // Switch to "all" view to see the new product
+  // If the user is viewing a filtered category that doesn't match the new product,
+  // switch back to 'all' so the newly added item is immediately visible
   if (activeFilter !== 'all' && activeFilter !== category) {
     activeFilter = 'all';
     document.querySelectorAll('.cat-tab').forEach(t => t.classList.toggle('active', t.dataset.cat === 'all'));
@@ -267,320 +344,84 @@ $('addManualBtn').addEventListener('click', async () => {
   render();
 });
 
-// ─── Capture from page ─────────────────────────────────────────────────────
+// ─── Capture from current tab ─────────────────────────────────────────────────
 
+// A captura é delegada a background.js: ele injeta extractor.js na aba, repete
+// até a SPA hidratar, classifica, deduplica e grava no orçamento. O popup só
+// pede, relê o storage e redesenha.
+//
+// O popup roda no contexto da extensão e não enxerga o DOM da loja, por isso
+// precisa informar qual aba deve ser capturada.
 $('captureBtn').addEventListener('click', async () => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id) return;
 
   showStatus('⏳ Capturando produto...', 'info', 8000);
 
-  try {
-    const results = await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      func: extractProductFromPage
-    });
+  const res = await chrome.runtime.sendMessage({ action: 'captureProduct', tabId: tab.id })
+    .catch(() => null); // service worker indisponível
 
-    const d = results?.[0]?.result;
-
-    if (!d?.name) {
-      showStatus('⚠ Produto não identificado nesta página', 'warn');
-      return;
-    }
-
-    // Assign category based on keywords in product name
-    const cat = guessCategory(d.name);
-
-    products.push({
-      id: Date.now(),
-      name: d.name,
-      brand: d.brand || '',
-      sku: d.sku || '',
-      price: d.price || 0,
-      qty: 1,
-      category: cat,
-      img: d.img || '',
-      dims: d.dims || '',
-      url: d.url || ''
-    });
-
-    await save();
-    activeFilter = 'all';
-    document.querySelectorAll('.cat-tab').forEach(t => t.classList.toggle('active', t.dataset.cat === 'all'));
-    render();
-
-    showStatus(`✓ "${d.name.substring(0, 42)}…" adicionado como ${CATEGORIES.find(c=>c.id===cat)?.label}`, 'ok');
-  } catch (err) {
-    showStatus('⚠ Erro ao acessar esta página. Tente em uma loja online.', 'warn');
+  if (!res) {
+    showStatus('⚠ Erro ao capturar. Tente novamente.', 'warn');
+    return;
   }
+  if (!res.ok) {
+    showStatus(res.reason === 'blocked'
+      ? '⚠ Não é possível capturar nesta página. Tente em uma loja online.'
+      : '⚠ Produto não identificado nesta página', 'warn');
+    return;
+  }
+
+  // background.js já escreveu em storage; recarregamos para refletir a mudança
+  const data = await chrome.storage.local.get('products');
+  products = data.products || [];
+
+  // Volta para "Todos" para que o item capturado apareça mesmo com filtro ativo
+  activeFilter = 'all';
+  document.querySelectorAll('.cat-tab').forEach(t => t.classList.toggle('active', t.dataset.cat === 'all'));
+  render();
+
+  showStatus(res.deduped
+    ? `✓ Já estava no orçamento — quantidade: ${res.qty}`
+    : `✓ "${(res.name || '').substring(0, 42)}…" adicionado como ${res.categoryLabel}`, 'ok');
 });
 
-// ─── Auto-guess category from product name ─────────────────────────────────
-
-function guessCategory(name) {
-  const n = name.toLowerCase();
-  if (/piso|cerâmic|porcelan|revestimento|argamassa|rejunte|tijolet|pedra|mármo|granito|parquet|laminado|deck|azulejo|grês/.test(n))
-    return 'revestimentos';
-  if (/vaso sanitário|bacia sanitária|cuba|torneira|ducha|chuveiro|sifão|mictório|válvula|box|banheira|fechadura|cadeado|registro|misturador|metalic/.test(n))
-    return 'loucas-metais';
-  if (/luminária|lâmpada|lustre|arandela|spot|trilho|pendente|led|plafon/.test(n))
-    return 'iluminacao';
-  if (/geladeira|refrigerador|fogão|forno|microondas|máquina de lavar|máquina de secar|lava.louça|lavadora|secadora|air fryer|aspirador|purificador|climatizador|ar condicionado|ventilador|exaustor|coifa|cooktop/.test(n))
-    return 'eletros';
-  if (/sofá|poltrona|mesa|cadeira|cama|colchão|armário|guarda.roupa|estante|rack|prateleira|criado.mudo|aparador|buffet|escrivaninha|banco|pufe|cabeceira|penteadeira/.test(n))
-    return 'moveis';
-  if (/tapete|quadro|almofada|cortina|persiana|espelho|toalha|lençol|fronha|edredom|travesseiro|enxoval|roupa de cama|vaso decorat|planta|interruptor|tomada|decoração|objeto decorat/.test(n))
-    return 'decoracao-enxoval';
-  return 'outros';
-}
-
-// ─── Clear all ─────────────────────────────────────────────────────────────
+// ─── Clear all ────────────────────────────────────────────────────────────────
 
 $('clearBtn').addEventListener('click', async () => {
-  if (products.length === 0) return;
+  if (products.length === 0) return; // nothing to clear
   if (!confirm('Deseja limpar todos os produtos do orçamento?')) return;
   products = [];
   await save();
   render();
 });
 
-// ─── Generate PDF ──────────────────────────────────────────────────────────
+// ─── Open PDF / Library pages ─────────────────────────────────────────────────
 
-$('generateBtn').addEventListener('click', () => {
-  chrome.runtime.sendMessage({ action: 'openPrint' });
-});
-
-$('libraryBtn').addEventListener('click', () => {
-  chrome.runtime.sendMessage({ action: 'openLibrary' });
-});
-
-// ─── Product extractor (injected into page) ────────────────────────────────
-// This function runs in the context of the store page.
-
-function extractProductFromPage() {
-  // ── JSON-LD helper — searches all scripts, unwraps @graph ────────────────
-  function fromJsonLD(pick) {
-    for (const s of document.querySelectorAll('script[type="application/ld+json"]')) {
-      try {
-        const root = JSON.parse(s.textContent);
-        const nodes = [];
-        const unwrap = o => {
-          if (Array.isArray(o)) o.forEach(unwrap);
-          else if (o && typeof o === 'object') {
-            nodes.push(o);
-            if (o['@graph']) unwrap(o['@graph']);
-          }
-        };
-        unwrap(root);
-        for (const n of nodes) {
-          const v = pick(n);
-          if (v !== null && v !== undefined && v !== '') return v;
-        }
-      } catch {}
+// Send messages to background.js which opens the extension pages in new tabs.
+// The popup cannot call chrome.tabs.create directly without the 'tabs' permission
+// (which it has), but delegating to the background keeps the popup clean and
+// makes it easy to add behaviour (e.g. focus an existing tab) in one place.
+// Sends a message to background.js and falls back to chrome.tabs.create if the
+// service worker is inactive (common in MV3 — worker can be terminated when idle).
+function openExtPage(action, file) {
+  chrome.runtime.sendMessage({ action }, () => {
+    if (chrome.runtime.lastError) {
+      // Service worker didn't respond — open the tab directly as fallback
+      chrome.tabs.create({ url: chrome.runtime.getURL(file) });
     }
-    return null;
-  }
-
-  // ── Parse Brazilian price string ─────────────────────────────────────────
-  function parsePrice(str) {
-    if (!str) return 0;
-    const m = str.match(/[\d.,]+/);
-    if (!m) return 0;
-    const raw = m[0];
-    if (/\d{1,3}(\.\d{3})+(,\d{2})?$/.test(raw))
-      return parseFloat(raw.replace(/\./g, '').replace(',', '.'));
-    if (raw.includes(','))
-      return parseFloat(raw.replace(/\./g, '').replace(',', '.'));
-    return parseFloat(raw) || 0;
-  }
-
-  // ── VTEX __STATE__ price fallback ────────────────────────────────────────
-  function getVtexPrice() {
-    try {
-      const state = window.__STATE__;
-      if (!state) return null;
-      for (const key of Object.keys(state)) {
-        const node = state[key];
-        if (node?.selling?.price) return node.selling.price / 100;
-        if (node?.spotPrice)      return node.spotPrice;
-      }
-    } catch {}
-    return null;
-  }
-
-  const host = location.hostname.replace(/^www\./, '');
-
-  // ── Name ─────────────────────────────────────────────────────────────────
-  function getName() {
-    if (host.includes('leroymerlin')) {
-      const el = document.querySelector('[data-testid="product-name"], h1[class*="title"], h1[class*="product"]');
-      if (el?.innerText) return el.innerText.trim();
-    }
-    if (host.includes('samsung')) {
-      const el = document.querySelector('.pd-title, h1[class*="title"], h1[class*="product"]');
-      if (el?.innerText) return el.innerText.trim();
-    }
-    if (host.includes('electrolux') || host.includes('brastemp')) {
-      const el = document.querySelector('h1[class*="product"], h1[class*="name"], h1');
-      if (el?.innerText) return el.innerText.trim();
-    }
-    if (host.includes('dexco') || host.includes('deca.')) {
-      const el = document.querySelector('h1[class*="product"], h1[class*="title"], h1');
-      if (el?.innerText) return el.innerText.trim();
-    }
-
-    const og = document.querySelector('meta[property="og:title"]')?.content?.trim();
-    if (og && og.length > 3) return og;
-
-    const h1 = document.querySelector('h1');
-    if (h1) return h1.innerText.trim();
-
-    return document.title.split(/[|\-–·]/)[0].trim();
-  }
-
-  // ── Brand ────────────────────────────────────────────────────────────────
-  function getBrand() {
-    const fromMeta = document.querySelector('meta[property="product:brand"]')?.content
-      || document.querySelector('meta[itemprop="brand"]')?.content;
-    if (fromMeta) return fromMeta.trim();
-
-    const fromLD = fromJsonLD(d => {
-      if (d?.brand?.name) return d.brand.name;
-      if (typeof d?.brand === 'string' && d.brand) return d.brand;
-      return null;
-    });
-    if (fromLD) return fromLD;
-
-    const el = document.querySelector(
-      '[data-testid="brand-name"], [class*="product-brand"], [class*="brandName"], [itemprop="brand"]'
-    );
-    if (el?.innerText) return el.innerText.trim();
-
-    return '';
-  }
-
-  // ── SKU ──────────────────────────────────────────────────────────────────
-  function getSKU() {
-    const fromLD = fromJsonLD(d => d?.sku || d?.mpn || null);
-    if (fromLD) return String(fromLD);
-
-    const m = document.body.innerText.match(/(?:SKU|Cód\.?|Código|Referência|Ref\.?|Art\.?)[:\s#]*([A-Z0-9\-]{4,20})/i);
-    return m ? m[1].trim() : '';
-  }
-
-  // ── Price ────────────────────────────────────────────────────────────────
-  function getPrice() {
-    // 1. JSON-LD — pick lowest offer price
-    const ldPrice = fromJsonLD(d => {
-      const offers = d?.offers || d?.Offers;
-      if (!offers) return null;
-      const arr = Array.isArray(offers) ? offers : [offers];
-      const ps = arr
-        .map(o => parseFloat(String(o?.price ?? o?.lowPrice ?? 0).replace(',', '.')))
-        .filter(p => p > 0);
-      return ps.length ? Math.min(...ps) : null;
-    });
-    if (ldPrice && ldPrice > 0) return ldPrice;
-
-    // 2. Meta tag
-    const metaP = document.querySelector('meta[property="product:price:amount"]')?.content;
-    if (metaP) { const v = parseFloat(metaP.replace(',', '.')); if (v > 0) return v; }
-
-    // 3. VTEX __STATE__
-    const vtex = getVtexPrice();
-    if (vtex && vtex > 0) return vtex;
-
-    // 4. Site-specific selectors
-    const SITE_PRICE_SEL = {
-      'telhanorte':    '.priceSpot, [class*="priceSpot"], [class*="price-spot"], .valoper__price',
-      'obrafacil':     '.price-spot, .price__selling, [class*="sellingPrice"]',
-      'abcconstrucao': '.price-spot, .product-price, [class*="price"]',
-      'leroymerlin':   '[data-testid="price"], [class*="sellingPrice"], [class*="price__selling"]',
-      'andra':         '.price, [class*="product-price"], [class*="sellingPrice"]',
-      'inspirehome':   '.price, [class*="product-price"]',
-      'yamamura':      '.price, [class*="product-price"], [class*="sellingPrice"]',
-      'belametais':    '.price, [class*="product-price"]',
-      'tokstok':       '[class*="spotPrice"], [class*="priceContainer"] .price',
-      'westwing':      '[class*="ProductPrice"], [class*="price__selling"]',
-      'boobam':        '.price, [class*="product-price"], [class*="sellingPrice"]',
-      'camicado':      '[class*="spotPrice"], [class*="sellingPrice"]',
-      'muma':          '.price, [class*="product-price"]',
-      'dexco':         '.price, [class*="product-price"]',
-      'deca.':         '.price, [class*="product-price"]',
-      'electrolux':    '[class*="product-price"], [class*="price-info"], .price',
-      'fastshop':      '[class*="bestPrice"], [class*="price-best"], .price',
-      'brastemp':      '[class*="product-price"], [class*="price-info"], .price',
-      'samsung':       '[class*="price-info"], [class*="pd-price"], [class*="price"]',
-    };
-
-    for (const [key, sel] of Object.entries(SITE_PRICE_SEL)) {
-      if (host.includes(key)) {
-        const el = document.querySelector(sel);
-        if (el) { const v = parsePrice(el.textContent); if (v > 0) return v; }
-        break;
-      }
-    }
-
-    // 5. Walk text nodes — pick most frequent R$ value
-    const prices = [];
-    const walk = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
-    let node;
-    while ((node = walk.nextNode())) {
-      const m = node.textContent.match(/R\$\s*([\d.,]+)/);
-      if (m) {
-        const v = parsePrice(m[1]);
-        if (v > 0 && v < 500000) prices.push(v);
-      }
-    }
-    if (prices.length > 0) {
-      const freq = {};
-      prices.forEach(v => freq[v] = (freq[v] || 0) + 1);
-      return parseFloat(Object.entries(freq).sort((a, b) => b[1] - a[1])[0][0]);
-    }
-
-    return 0;
-  }
-
-  // ── Image ────────────────────────────────────────────────────────────────
-  function getBestImage() {
-    const og = document.querySelector('meta[property="og:image"]')?.content;
-    if (og && !/logo|icon/.test(og.toLowerCase())) return og;
-
-    const ldImg = fromJsonLD(d => {
-      if (typeof d?.image === 'string' && d.image) return d.image;
-      if (d?.image?.url) return d.image.url;
-      if (Array.isArray(d?.image) && d.image.length)
-        return typeof d.image[0] === 'string' ? d.image[0] : (d.image[0]?.url || null);
-      return null;
-    });
-    if (ldImg) return ldImg;
-
-    const candidates = [...document.images]
-      .map(img => ({
-        src: img.src || img.dataset.src || img.dataset.lazySrc || img.dataset.original || '',
-        area: img.naturalWidth * img.naturalHeight,
-        ratio: img.naturalWidth / (img.naturalHeight || 1),
-      }))
-      .filter(({ src, area, ratio }) => {
-        if (!src || area < 150 * 150) return false;
-        if (/logo|icon|sprite|banner|badge|avatar|header|footer/.test(src.toLowerCase())) return false;
-        return ratio >= 0.4 && ratio <= 2.5;
-      })
-      .sort((a, b) => b.area - a.area);
-
-    return candidates[0]?.src || '';
-  }
-
-  return {
-    name:  getName(),
-    brand: getBrand(),
-    sku:   getSKU(),
-    price: getPrice(),
-    img:   getBestImage(),
-    dims:  '',
-    url:   window.location.href
-  };
+  });
 }
 
-// ─── Boot ───────────────────────────────────────────────────────────────────
+// Exportar daqui significa "exportar o orçamento em andamento". Limpamos
+// printPayload para que a página de impressão não reaproveite um projeto salvo
+// que a Biblioteca tenha enfileirado antes.
+$('generateBtn').addEventListener('click', async () => {
+  await chrome.storage.local.set({ printPayload: null });
+  openExtPage('openPrint', 'print.html');
+});
+
+$('libraryBtn').addEventListener('click', () => openExtPage('openLibrary', 'library.html'));
+
+// ─── Boot ─────────────────────────────────────────────────────────────────────
 init();

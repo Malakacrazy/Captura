@@ -1,40 +1,48 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
+
 <head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Orçamento FF&E · Studio Araci</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com"/>
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
-  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,400&family=Jost:wght@300;400;500;600&family=Poppins:wght@400;600&display=swap" rel="stylesheet"/>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Orçamento FF&amp;E · Studio Araci</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700&display=swap"
+    rel="stylesheet" />
   <style>
     :root {
-      --ferrugem:  #A35940;
+      --ferrugem: #A35940;
       --terracota: #9F4F39;
-      --cacau:     #B36C51;
-      --baleia:    #5E6979;
-      --areia:     #E8DED4;
-      --duna:      #CDB8A3;
-      --grafite:   #454D59;
-      --bg:        #F5F0EB;
-      --text:      #2E2620;
-      --muted:     #7A6A60;
+      --cacau: #B36C51;
+      --baleia: #5E6979;
+      --areia: #E8DED4;
+      --duna: #CDB8A3;
+      --grafite: #454D59;
+      --bg: #F5F0EB;
+      --text: #2E2620;
+      --muted: #7A6A60;
 
       /* Category colors */
-      --cat-rev:  #9F4F39;
-      --cat-lou:  #5E6979;
-      --cat-ilu:  #AA9C79;
-      --cat-ele:  #607080;
-      --cat-mov:  #8D6E63;
-      --cat-dec:  #8E9A6A;
-      --cat-out:  #9AA09A;
+      --cat-rev: #9F4F39;
+      --cat-lou: #5E6979;
+      --cat-ilu: #AA9C79;
+      --cat-ele: #607080;
+      --cat-mov: #8D6E63;
+      --cat-dec: #8E9A6A;
+      --cat-out: #9AA09A;
     }
 
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
 
     body {
       background: #ccc5bc;
-      font-family: 'Jost', system-ui, sans-serif;
+      font-family: 'Montserrat', sans-serif;
       color: var(--text);
       min-height: 100vh;
       padding: 32px 0 80px;
@@ -53,11 +61,17 @@
       align-items: center;
       gap: 10px;
     }
-    .pb-title { color: rgba(255,255,255,0.7); font-size: 13px; flex: 1; }
+
+    .pb-title {
+      color: rgba(255, 255, 255, 0.7);
+      font-size: 13px;
+      flex: 1;
+    }
+
     .pb-btn {
       padding: 7px 18px;
       border-radius: 5px;
-      font-family: 'Jost', sans-serif;
+      font-family: 'Montserrat', sans-serif;
       font-size: 13px;
       font-weight: 500;
       cursor: pointer;
@@ -65,11 +79,41 @@
       transition: all 0.15s;
       letter-spacing: 0.03em;
     }
-    .pb-btn.primary { background: var(--ferrugem); color: #fff; }
-    .pb-btn.primary:hover { background: var(--terracota); }
-    .pb-btn.secondary { background: rgba(255,255,255,0.12); color: #fff; border: 1px solid rgba(255,255,255,0.2); }
-    .pb-btn.secondary:hover { background: rgba(255,255,255,0.2); }
-    .pb-hint { color: rgba(255,255,255,0.5); font-size: 11.5px; }
+
+    .pb-btn.primary {
+      background: var(--ferrugem);
+      color: #fff;
+    }
+
+    .pb-btn.primary:hover {
+      background: var(--terracota);
+    }
+
+    .pb-btn.secondary {
+      background: rgba(255, 255, 255, 0.12);
+      color: #fff;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    .pb-btn.secondary:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+
+    .pb-btn.xlsx {
+      background: #fff;
+      color: var(--ferrugem);
+      border: 1px solid #fff;
+    }
+
+    .pb-btn.xlsx:hover {
+      background: #FFE8DC;
+      border-color: #FFE8DC;
+    }
+
+    .pb-hint {
+      color: rgba(255, 255, 255, 0.5);
+      font-size: 11.5px;
+    }
 
     /* A4 page */
     .page {
@@ -77,7 +121,7 @@
       min-height: 1123px;
       margin: 52px auto 0;
       background: #fff;
-      box-shadow: 0 12px 56px rgba(0,0,0,0.22);
+      box-shadow: 0 12px 56px rgba(0, 0, 0, 0.22);
       display: flex;
       flex-direction: column;
     }
@@ -96,19 +140,29 @@
       border-bottom: 1px solid var(--areia);
     }
 
-    .logo-block { display: flex; align-items: center; gap: 16px; }
-    .logo-img { width: 58px; height: 58px; border-radius: 50%; display: block; }
+    .logo-block {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .logo-img {
+      height: 36px;
+      width: auto;
+      display: block;
+    }
 
     .logo-name {
-      font-family: 'Cormorant Garamond', serif;
+      font-family: 'Montserrat', sans-serif;
       font-size: 20px;
       font-weight: 400;
       letter-spacing: 0.22em;
       color: var(--ferrugem);
       text-transform: uppercase;
     }
+
     .logo-tagline {
-      font-family: 'Jost', sans-serif;
+      font-family: 'Montserrat', sans-serif;
       font-size: 8px;
       letter-spacing: 0.22em;
       text-transform: uppercase;
@@ -116,10 +170,32 @@
       margin-top: 3px;
     }
 
-    .doc-info { text-align: right; }
-    .doc-eyebrow { font-size: 9px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
-    .doc-type { font-family: 'Poppins', sans-serif; font-size: 26px; font-weight: 600; color: var(--text); }
-    .doc-date { font-size: 12px; color: var(--muted); margin-top: 5px; }
+    .doc-info {
+      text-align: right;
+    }
+
+    .doc-eyebrow {
+      font-size: 9px;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+
+    .doc-type {
+      font-family: 'Montserrat', sans-serif;
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--text);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .doc-date {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 5px;
+    }
 
     /* Project */
     .project-bar {
@@ -127,22 +203,78 @@
       padding: 14px 52px;
       border-bottom: 1px solid var(--areia);
     }
-    .proj-label { font-size: 9px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); font-weight: 500; margin-bottom: 2px; }
-    .proj-name  { font-family: 'Poppins', sans-serif; font-size: 20px; font-weight: 600; color: var(--text); }
+
+    .proj-label {
+      font-size: 9px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--muted);
+      font-weight: 500;
+      margin-bottom: 2px;
+    }
+
+    .proj-name {
+      font-family: 'Montserrat', sans-serif;
+      font-size: 20px;
+      font-weight: 600;
+      color: var(--text);
+    }
 
     /* Summary */
-    .summary { display: flex; padding: 24px 52px; gap: 14px; border-bottom: 2px solid var(--areia); }
-    .sum-card { flex: 1; border: 1px solid var(--areia); border-radius: 5px; padding: 14px 18px; }
-    .sum-card.primary { background: var(--ferrugem); border-color: var(--ferrugem); }
-    .sum-lbl { font-size: 8.5px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
-    .sum-card.primary .sum-lbl { color: rgba(255,255,255,0.65); }
-    .sum-val { font-family: 'Poppins', sans-serif; font-size: 22px; font-weight: 600; color: var(--text); line-height: 1; margin-top: 3px; }
-    .sum-card.primary .sum-val { color: #fff; font-size: 22px; }
+    .summary {
+      display: flex;
+      padding: 24px 52px;
+      gap: 14px;
+      border-bottom: 2px solid var(--areia);
+    }
+
+    .sum-card {
+      flex: 1;
+      border: 1px solid var(--areia);
+      border-radius: 5px;
+      padding: 14px 18px;
+    }
+
+    .sum-card.primary {
+      background: var(--ferrugem);
+      border-color: var(--ferrugem);
+    }
+
+    .sum-lbl {
+      font-size: 8.5px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--muted);
+      font-weight: 500;
+    }
+
+    .sum-card.primary .sum-lbl {
+      color: rgba(255, 255, 255, 0.65);
+    }
+
+    .sum-val {
+      font-family: 'Montserrat', sans-serif;
+      font-size: 22px;
+      font-weight: 600;
+      color: var(--text);
+      line-height: 1;
+      margin-top: 3px;
+    }
+
+    .sum-card.primary .sum-val {
+      color: #fff;
+      font-size: 22px;
+    }
 
     /* Category sections */
-    .sections { padding: 0 52px 36px; flex: 1; }
+    .sections {
+      padding: 0 52px 36px;
+      flex: 1;
+    }
 
-    .cat-section { margin-top: 28px; }
+    .cat-section {
+      margin-top: 28px;
+    }
 
     .cat-header {
       display: flex;
@@ -150,7 +282,12 @@
       gap: 12px;
       margin-bottom: 0;
     }
-    .cat-line { flex: 1; height: 1px; }
+
+    .cat-line {
+      flex: 1;
+      height: 1px;
+    }
+
     .cat-label {
       font-size: 9px;
       letter-spacing: 0.22em;
@@ -160,22 +297,59 @@
       border-radius: 20px;
       color: #fff;
     }
-    .cat-count { font-size: 10px; color: var(--muted); }
 
-    .cat-label.revestimentos,     .cat-line.revestimentos     { background: var(--cat-rev); }
-    .cat-label.loucas-metais,     .cat-line.loucas-metais     { background: var(--cat-lou); }
-    .cat-label.iluminacao,        .cat-line.iluminacao        { background: var(--cat-ilu); }
-    .cat-label.eletros,           .cat-line.eletros           { background: var(--cat-ele); }
-    .cat-label.moveis,            .cat-line.moveis            { background: var(--cat-mov); }
-    .cat-label.decoracao-enxoval, .cat-line.decoracao-enxoval { background: var(--cat-dec); }
-    .cat-label.outros,            .cat-line.outros            { background: var(--cat-out); }
+    .cat-count {
+      font-size: 10px;
+      color: var(--muted);
+    }
 
-    .cat-line { height: 1px; opacity: 0.35; }
+    .cat-label.revestimentos,
+    .cat-line.revestimentos {
+      background: var(--cat-rev);
+    }
+
+    .cat-label.loucas-metais,
+    .cat-line.loucas-metais {
+      background: var(--cat-lou);
+    }
+
+    .cat-label.iluminacao,
+    .cat-line.iluminacao {
+      background: var(--cat-ilu);
+    }
+
+    .cat-label.eletros,
+    .cat-line.eletros {
+      background: var(--cat-ele);
+    }
+
+    .cat-label.moveis,
+    .cat-line.moveis {
+      background: var(--cat-mov);
+    }
+
+    .cat-label.decoracao-enxoval,
+    .cat-line.decoracao-enxoval {
+      background: var(--cat-dec);
+    }
+
+    .cat-label.outros,
+    .cat-line.outros {
+      background: var(--cat-out);
+    }
+
+    .cat-line {
+      height: 1px;
+      opacity: 0.35;
+    }
 
     /* Table */
+    /* 6 colunas: imagem | Produto | Ambiente | Observações | Qtd | Subtotal.
+     * O custo unitário fica só no Excel — no PDF ele apertava demais as colunas.
+     * grid-template-columns aqui e em .table-row precisam ser idênticos. */
     .table-header {
       display: grid;
-      grid-template-columns: 52px 1fr 50px 90px 90px;
+      grid-template-columns: 52px 1fr 90px 90px 50px 90px;
       gap: 10px;
       padding: 8px 12px;
       background: var(--grafite);
@@ -191,13 +365,16 @@
 
     .table-row {
       display: grid;
-      grid-template-columns: 52px 1fr 50px 90px 90px;
+      grid-template-columns: 52px 1fr 90px 90px 50px 90px;
       gap: 10px;
       padding: 10px 12px;
       border-bottom: 1px solid var(--areia);
       align-items: center;
     }
-    .table-row:nth-child(even) { background: var(--bg); }
+
+    .table-row:nth-child(even) {
+      background: var(--bg);
+    }
 
     .prod-img {
       width: 48px;
@@ -208,6 +385,7 @@
       image-orientation: from-image;
       display: block;
     }
+
     .prod-img-ph {
       width: 48px;
       height: 48px;
@@ -220,13 +398,41 @@
       color: var(--duna);
     }
 
-    .prod-name-print { font-size: 12.5px; font-weight: 500; color: var(--text); line-height: 1.35; margin-bottom: 2px; }
-    .prod-meta-print { font-size: 10px; color: var(--muted); }
-    .prod-meta-print a { color: var(--ferrugem); text-decoration: none; }
+    .prod-name-print {
+      font-size: 12.5px;
+      font-weight: 500;
+      color: var(--text);
+      line-height: 1.35;
+      margin-bottom: 2px;
+    }
 
-    .col-center { text-align: center; font-size: 13px; font-weight: 500; }
-    .col-right  { text-align: right; font-size: 12.5px; }
-    .col-total  { text-align: right; font-size: 13px; font-weight: 700; color: var(--ferrugem); }
+    .prod-meta-print {
+      font-size: 10px;
+      color: var(--muted);
+    }
+
+    .prod-meta-print a {
+      color: var(--ferrugem);
+      text-decoration: none;
+    }
+
+    .col-center {
+      text-align: center;
+      font-size: 13px;
+      font-weight: 500;
+    }
+
+    .col-right {
+      text-align: right;
+      font-size: 12.5px;
+    }
+
+    .col-total {
+      text-align: right;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--ferrugem);
+    }
 
     /* Category subtotal */
     .cat-subtotal {
@@ -237,8 +443,19 @@
       padding: 6px 12px 0;
       font-size: 11px;
     }
-    .cat-sub-label { color: var(--muted); letter-spacing: 0.06em; text-transform: uppercase; font-size: 9px; }
-    .cat-sub-value { font-weight: 600; color: var(--text); font-size: 13px; }
+
+    .cat-sub-label {
+      color: var(--muted);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      font-size: 9px;
+    }
+
+    .cat-sub-value {
+      font-weight: 600;
+      color: var(--text);
+      font-size: 13px;
+    }
 
     /* Grand total */
     .grand-total-row {
@@ -251,8 +468,21 @@
       align-items: baseline;
       padding: 14px 20px;
     }
-    .gt-label { font-size: 9.5px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
-    .gt-value { font-family: 'Poppins', sans-serif; font-size: 24px; font-weight: 600; color: var(--ferrugem); }
+
+    .gt-label {
+      font-size: 9.5px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--muted);
+      font-weight: 600;
+    }
+
+    .gt-value {
+      font-family: 'Montserrat', sans-serif;
+      font-size: 24px;
+      font-weight: 600;
+      color: var(--ferrugem);
+    }
 
     /* Footer */
     .footer {
@@ -263,38 +493,99 @@
       align-items: flex-end;
       border-top: 1px solid var(--areia);
     }
-    .footer-note { font-size: 9px; color: var(--muted); line-height: 1.7; max-width: 340px; }
-    .footer-brand-name { font-family: 'Cormorant Garamond', serif; font-size: 12px; font-weight: 400; letter-spacing: 0.2em; text-transform: uppercase; color: var(--ferrugem); }
-    .footer-tagline { font-size: 7.5px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--muted); margin-top: 2px; }
+
+    .footer-note {
+      font-size: 9px;
+      color: var(--muted);
+      line-height: 1.7;
+      max-width: 340px;
+    }
+
+    .footer-logo {
+      height: 28px;
+      width: auto;
+      display: block;
+    }
 
     .accent-bottom {
       height: 4px;
       background: linear-gradient(90deg, var(--duna) 0%, var(--cacau) 50%, var(--ferrugem) 100%);
     }
 
-    /* Evitar quebras no meio de linhas e seções */
-    .table-row   { page-break-inside: avoid; break-inside: avoid; }
-    .cat-section { page-break-inside: avoid; break-inside: avoid; }
-    .cat-header  { page-break-after:  avoid; break-after:  avoid; }
+    /* ── Quebras de página ────────────────────────────────────────────────
+     * A linha do produto é a única coisa que nunca deve ser partida ao meio.
+     *
+     * IMPORTANTE: .cat-section NÃO pode levar break-inside:avoid. Uma disciplina
+     * com muitos itens é mais alta que uma página A4; ao proibir a quebra dentro
+     * dela, o navegador é forçado a quebrar assim mesmo e acaba CORTANDO as
+     * linhas excedentes. Deixamos a seção quebrar livremente e protegemos só o
+     * que precisa: a linha individual e os cabeçalhos, que não podem ficar
+     * órfãos no rodapé de uma página. */
+    .table-row {
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+
+    .cat-header {
+      page-break-after: avoid;
+      break-after: avoid;
+    }
+
+    .table-header {
+      page-break-after: avoid;
+      break-after: avoid;
+    }
 
     /* Print media */
     @media print {
-      body { background: none; padding: 0; }
-      .print-bar { display: none; }
-      .page { margin: 0; width: 100%; box-shadow: none; min-height: auto; }
+      body {
+        background: none;
+        padding: 0;
+      }
 
-      /* Margem superior e inferior em todas as páginas para não colar no corte */
+      .print-bar {
+        display: none;
+      }
+
+      .page {
+        margin: 0;
+        width: 100%;
+        box-shadow: none;
+        min-height: auto;
+      }
+
+      /* Rodapé em FLUXO NORMAL — aparece uma vez, ao fim do documento.
+       *
+       * Antes ele era position:fixed, o que o repetia no pé de TODA página e o
+       * fazia sobrepor a última linha de cada página (o rodapé "comia" o item).
+       * Em fluxo normal isso não acontece: o conteúdo termina, o rodapé vem
+       * depois, e não há sobreposição possível. break-inside:avoid impede que o
+       * próprio rodapé seja partido entre duas páginas. */
+      .footer {
+        padding: 14px 52px 18px;
+        background: #fff;
+        border-top: 1px solid var(--areia);
+        break-inside: avoid;
+        page-break-inside: avoid;
+      }
+
+      /* Reserva espaço no fundo de cada página para o footer fixo */
+      /* Margens uniformes e modestas. O grande espaço de 28mm no rodapé só
+       * existia para reservar lugar ao rodapé fixo, que agora flui no conteúdo.
+       * As laterais ficam em 0 porque o próprio conteúdo já tem 52px de padding
+       * horizontal, que forma a margem visual. */
       @page {
         size: A4;
-        margin: 14mm 0;
+        margin: 12mm 0;
       }
-      /* Primeira página sem margem extra — o cabeçalho HTML já preenche */
+
       @page :first {
-        margin: 0;
+        margin: 0 0 12mm;
       }
     }
   </style>
 </head>
+
 <body>
 
   <!-- Screen-only print bar -->
@@ -302,6 +593,7 @@
     <span class="pb-title">Studio Araci · Orçamento FF&amp;E — pronto para imprimir</span>
     <span class="pb-hint">Dica: escolha "Salvar como PDF" na impressora</span>
     <button class="pb-btn secondary" id="backBtn">← Fechar</button>
+    <button class="pb-btn xlsx" id="xlsxBtn">📊 Salvar Excel</button>
     <button class="pb-btn primary" id="printBtn">⬇ Salvar PDF</button>
   </div>
 
@@ -311,11 +603,7 @@
     <!-- Header -->
     <header class="header">
       <div class="logo-block">
-        <img src="icons/icon128.png" class="logo-img" alt="Studio Araci"/>
-        <div>
-          <div class="logo-name">Studio Araci</div>
-          <div class="logo-tagline">Tudo começa pelo que você sente</div>
-        </div>
+        <img src="icons/icon128.png" class="logo-img" alt="Studio Araci" />
       </div>
       <div class="doc-info">
         <div class="doc-eyebrow">Documento</div>
@@ -361,18 +649,20 @@
     <!-- Footer -->
     <footer class="footer">
       <div class="footer-note">
-        Este orçamento tem caráter referencial e está sujeito a alterações de preço e disponibilidade de estoque.<br/>
+        Este orçamento tem caráter referencial e está sujeito a alterações de preço e disponibilidade de estoque.<br />
         Gerado por Studio Araci · Arquitetura e Design de Interiores.
       </div>
       <div>
-        <div class="footer-brand-name">Studio Araci</div>
-        <div class="footer-tagline">Tudo começa pelo que você sente</div>
+        <img src="icons/icon128.png" class="footer-logo" alt="Studio Araci" />
       </div>
     </footer>
 
     <div class="accent-bottom"></div>
   </div>
 
+  <!-- categories.js define STUDIO_ARACI_CATEGORIES; precisa vir antes -->
+  <script src="categories.js"></script>
   <script src="print.js"></script>
 </body>
+
 </html>

@@ -1,15 +1,29 @@
-// content.js v3 — Studio Araci FF&E · Floating capture button
+// content.js v4 — Studio Araci FF&E · Botões flutuantes
+//
+// Injetado em todas as páginas (content_scripts no manifest). Este arquivo é
+// APENAS interface: desenha os botões flutuantes, o overlay do popup e o toast.
+//
+// A raspagem do produto NÃO mora mais aqui. Ela foi para extractor.js e é
+// orquestrada por background.js — antes havia uma cópia inteira da extração
+// neste arquivo e outra em popup.js, e as duas já haviam divergido (mesmo
+// produto era classificado de forma diferente conforme o botão usado).
+// Agora o clique só manda uma mensagem e mostra o resultado.
 
+// IIFE para não poluir o escopo global da página hospedeira: nada declarado
+// aqui é visível para o JavaScript do site.
 (function () {
   'use strict';
 
+  // Guarda contra injeção duplicada — acontece em navegação de SPA, quando o
+  // Chrome reexecuta o content script sem recarregar a página.
   if (document.getElementById('sa-fab')) return;
 
-  // ─── Floating button ─────────────────────────────────────────────────────
+  // ─── Botões flutuantes ────────────────────────────────────────────────────
 
   const fab = document.createElement('button');
-  fab.id = 'sa-fab';
+  fab.id = 'sa-fab'; // estilizado em content.css; o id também é a guarda acima
   fab.setAttribute('aria-label', 'Adicionar ao Orçamento Studio Araci');
+  // SVG inline: evita requisição de rede e é imune a políticas de img-src da CSP
   fab.innerHTML = `
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
       <path d="M12 5v14M5 12h14"/>
@@ -17,299 +31,158 @@
     <span>Orçamento</span>
   `;
 
+  const fabLib = document.createElement('button');
+  fabLib.id = 'sa-fab-lib';
+  fabLib.setAttribute('aria-label', 'Abrir Projeto Studio Araci');
+  fabLib.innerHTML = `
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+    </svg>
+    <span>Abrir Projeto</span>
+  `;
+
+  // Toast — escondido por CSS (opacity:0), revelado por classe
   const toast = document.createElement('div');
   toast.id = 'sa-toast';
 
-  document.body.append(fab, toast);
+  document.body.append(fab, fabLib, toast);
 
-  // ─── Click handler ───────────────────────────────────────────────────────
+  // ─── Overlay do popup ─────────────────────────────────────────────────────
+  // O popup é aberto como <iframe> sobre a página, para o usuário conferir o
+  // orçamento sem sair da loja.
 
-  fab.addEventListener('click', async () => {
+  let popupFrame = null;
+  let outsideClick = null; // handler registrado em document enquanto o iframe existe
+
+  // Fecha o overlay e SEMPRE remove o listener de clique externo.
+  // Na versão anterior o listener só era removido no caminho do clique fora;
+  // fechar pelo próprio botão ou pelo Ctrl+. deixava o handler pendurado em
+  // document, acumulando um a cada abertura.
+  function closePopupFrame() {
+    if (outsideClick) {
+      document.removeEventListener('click', outsideClick);
+      outsideClick = null;
+    }
+    if (popupFrame) {
+      popupFrame.remove();
+      popupFrame = null;
+    }
+  }
+
+  fabLib.addEventListener('click', () => {
+    if (popupFrame) { closePopupFrame(); return; }
+
+    popupFrame = document.createElement('iframe');
+    popupFrame.id = 'sa-popup-frame';
+    popupFrame.src = chrome.runtime.getURL('popup.html');
+    document.body.appendChild(popupFrame);
+
+    outsideClick = (e) => {
+      // Cliques dentro do iframe não chegam ao documento pai, então basta
+      // ignorar os cliques no próprio botão que abriu o overlay.
+      if (e.target !== fabLib && !fabLib.contains(e.target)) closePopupFrame();
+    };
+    // O setTimeout impede que o próprio clique que abriu o overlay o feche
+    setTimeout(() => document.addEventListener('click', outsideClick), 100);
+  });
+
+  // ─── Guarda de DOM — reinjeta se o site remover nossos elementos ───────────
+  // Frameworks SPA (React/VTEX na Leroy Merlin, etc.) podem substituir ou
+  // limpar document.body durante a hidratação, levando junto o que injetamos.
+  function ensureInDom() {
+    if (!document.getElementById('sa-fab')) {
+      (document.body || document.documentElement).append(fab, fabLib, toast);
+      applyFabVisibility();
+    }
+  }
+
+  // Observa só os filhos diretos de <body> — barato, sem varrer a subárvore
+  const domGuard = new MutationObserver(ensureInDom);
+
+  function attachDomGuard() {
+    if (document.body) domGuard.observe(document.body, { childList: true });
+  }
+  attachDomGuard();
+
+  // Se o site trocar o próprio <body>, reconecta o observer no novo
+  new MutationObserver(() => {
+    domGuard.disconnect();
+    attachDomGuard();
+    ensureInDom();
+  }).observe(document.documentElement, { childList: true });
+
+  // ─── Visibilidade (Ctrl+.) ────────────────────────────────────────────────
+  // Estado num booleano em vez de ler style do DOM, que fica ambíguo quando CSS
+  // e estilo inline conflitam durante a leitura assíncrona do storage.
+  let fabVisible = false;
+
+  function applyFabVisibility() {
+    fab.style.display = fabVisible ? 'flex' : 'none';
+    fabLib.style.display = fabVisible ? 'flex' : 'none';
+  }
+
+  chrome.storage.local.get('fabVisible', (data) => {
+    fabVisible = !!data.fabVisible;
+    applyFabVisibility();
+  });
+
+  // O atalho é capturado pelo Chrome (commands API) e repassado por
+  // background.js. Funciona em qualquer site, independente de como a página
+  // trata eventos de teclado.
+  chrome.runtime.onMessage.addListener((msg) => {
+    if (msg.action !== 'toggleFab') return;
+    fabVisible = !fabVisible;
+    applyFabVisibility();
+    chrome.storage.local.set({ fabVisible });
+    if (!fabVisible) closePopupFrame();
+  });
+
+  // ─── Captura ──────────────────────────────────────────────────────────────
+
+  fab.addEventListener('click', () => {
+    // Estado de carregamento — a CSS desabilita pointer-events na classe
     fab.classList.add('loading');
     fab.querySelector('span').textContent = 'Capturando…';
 
-    try {
-      const product = await extractProduct();
-
-      if (!product.name) {
-        showToast('⚠ Produto não identificado nesta página.', 'warn');
-        return;
-      }
-
-      const storage = await chrome.storage.local.get('products');
-      const products = storage.products || [];
-      products.push(product);
-      await chrome.storage.local.set({ products });
-
-      showToast(`✓ Adicionado: ${product.name.substring(0, 48)}`, 'ok');
-    } catch (e) {
-      showToast('⚠ Erro ao capturar. Tente adicionar manualmente.', 'warn');
-    } finally {
+    const restore = () => {
       fab.classList.remove('loading');
       fab.querySelector('span').textContent = 'Orçamento';
-    }
-  });
-
-  // ─── Product extraction ──────────────────────────────────────────────────
-
-  async function extractProduct() {
-    const name     = getName();
-    const brand    = getBrand();
-    const sku      = getSKU();
-    const price    = getPrice();
-    const img      = getBestImage();
-    const url      = window.location.href;
-    const category = guessCategory(name);
-
-    return { id: Date.now(), name, brand, sku, price, img, dims: '', url, qty: 1, category };
-  }
-
-  // ── JSON-LD helper — searches all scripts, unwraps @graph ─────────────────
-  function fromJsonLD(pick) {
-    for (const s of document.querySelectorAll('script[type="application/ld+json"]')) {
-      try {
-        const root = JSON.parse(s.textContent);
-        const nodes = [];
-        const unwrap = o => {
-          if (Array.isArray(o)) o.forEach(unwrap);
-          else if (o && typeof o === 'object') {
-            nodes.push(o);
-            if (o['@graph']) unwrap(o['@graph']);
-          }
-        };
-        unwrap(root);
-        for (const n of nodes) {
-          const v = pick(n);
-          if (v !== null && v !== undefined && v !== '') return v;
-        }
-      } catch {}
-    }
-    return null;
-  }
-
-  // ── Parse Brazilian price string ──────────────────────────────────────────
-  function parsePrice(str) {
-    if (!str) return 0;
-    const m = str.match(/[\d.,]+/);
-    if (!m) return 0;
-    const raw = m[0];
-    if (/\d{1,3}(\.\d{3})+(,\d{2})?$/.test(raw))
-      return parseFloat(raw.replace(/\./g, '').replace(',', '.'));
-    if (raw.includes(','))
-      return parseFloat(raw.replace(/\./g, '').replace(',', '.'));
-    return parseFloat(raw) || 0;
-  }
-
-  // ── VTEX __STATE__ price fallback ─────────────────────────────────────────
-  function getVtexPrice() {
-    try {
-      const state = window.__STATE__;
-      if (!state) return null;
-      for (const key of Object.keys(state)) {
-        const node = state[key];
-        if (node?.selling?.price) return node.selling.price / 100;
-        if (node?.spotPrice)      return node.spotPrice;
-      }
-    } catch {}
-    return null;
-  }
-
-  const host = location.hostname.replace(/^www\./, '');
-
-  // ── Name ──────────────────────────────────────────────────────────────────
-  function getName() {
-    if (host.includes('leroymerlin')) {
-      const el = document.querySelector('[data-testid="product-name"], h1[class*="title"], h1[class*="product"]');
-      if (el?.innerText) return el.innerText.trim();
-    }
-    if (host.includes('samsung')) {
-      const el = document.querySelector('.pd-title, h1[class*="title"], h1[class*="product"]');
-      if (el?.innerText) return el.innerText.trim();
-    }
-    if (host.includes('electrolux') || host.includes('brastemp')) {
-      const el = document.querySelector('h1[class*="product"], h1[class*="name"], h1');
-      if (el?.innerText) return el.innerText.trim();
-    }
-    if (host.includes('dexco') || host.includes('deca.')) {
-      const el = document.querySelector('h1[class*="product"], h1[class*="title"], h1');
-      if (el?.innerText) return el.innerText.trim();
-    }
-
-    const og = document.querySelector('meta[property="og:title"]')?.content?.trim();
-    if (og && og.length > 3) return og;
-
-    const h1 = document.querySelector('h1');
-    if (h1) return h1.innerText.trim();
-
-    return document.title.split(/[|\-–·]/)[0].trim();
-  }
-
-  // ── Brand ─────────────────────────────────────────────────────────────────
-  function getBrand() {
-    const fromMeta = document.querySelector('meta[property="product:brand"]')?.content
-      || document.querySelector('meta[itemprop="brand"]')?.content;
-    if (fromMeta) return fromMeta.trim();
-
-    const fromLD = fromJsonLD(d => {
-      if (d?.brand?.name) return d.brand.name;
-      if (typeof d?.brand === 'string' && d.brand) return d.brand;
-      return null;
-    });
-    if (fromLD) return fromLD;
-
-    // Site-specific brand containers
-    const brandSel = [
-      '[data-testid="brand-name"]',
-      '[class*="product-brand"]',
-      '[class*="brandName"]',
-      '[itemprop="brand"]',
-    ].join(',');
-    const el = document.querySelector(brandSel);
-    if (el?.innerText) return el.innerText.trim();
-
-    return '';
-  }
-
-  // ── SKU ───────────────────────────────────────────────────────────────────
-  function getSKU() {
-    const fromLD = fromJsonLD(d => d?.sku || d?.mpn || null);
-    if (fromLD) return String(fromLD);
-
-    const bodyText = document.body.innerText;
-    const m = bodyText.match(/(?:SKU|Cód\.?|Código|Referência|Ref\.?|Art\.?)[:\s#]*([A-Z0-9\-]{4,20})/i);
-    return m ? m[1].trim() : '';
-  }
-
-  // ── Price ─────────────────────────────────────────────────────────────────
-  function getPrice() {
-    // 1. JSON-LD — pick lowest offer price
-    const ldPrice = fromJsonLD(d => {
-      const offers = d?.offers || d?.Offers;
-      if (!offers) return null;
-      const arr = Array.isArray(offers) ? offers : [offers];
-      const ps = arr
-        .map(o => parseFloat(String(o?.price ?? o?.lowPrice ?? 0).replace(',', '.')))
-        .filter(p => p > 0);
-      return ps.length ? Math.min(...ps) : null;
-    });
-    if (ldPrice && ldPrice > 0) return ldPrice;
-
-    // 2. Meta tag
-    const metaP = document.querySelector('meta[property="product:price:amount"]')?.content;
-    if (metaP) { const v = parseFloat(metaP.replace(',', '.')); if (v > 0) return v; }
-
-    // 3. VTEX __STATE__
-    const vtex = getVtexPrice();
-    if (vtex && vtex > 0) return vtex;
-
-    // 4. Site-specific selectors (most-specific first)
-    const SITE_PRICE_SEL = {
-      'telhanorte':    '.priceSpot, [class*="priceSpot"], [class*="price-spot"], .valoper__price',
-      'obrafacil':     '.price-spot, .price__selling, [class*="sellingPrice"]',
-      'abcconstrucao': '.price-spot, .product-price, [class*="price"]',
-      'leroymerlin':   '[data-testid="price"], [class*="sellingPrice"], [class*="price__selling"]',
-      'andra':         '.price, [class*="product-price"], [class*="sellingPrice"]',
-      'inspirehome':   '.price, [class*="product-price"]',
-      'yamamura':      '.price, [class*="product-price"], [class*="sellingPrice"]',
-      'belametais':    '.price, [class*="product-price"]',
-      'tokstok':       '[class*="spotPrice"], [class*="priceContainer"] .price',
-      'westwing':      '[class*="ProductPrice"], [class*="price__selling"]',
-      'boobam':        '.price, [class*="product-price"], [class*="sellingPrice"]',
-      'camicado':      '[class*="spotPrice"], [class*="sellingPrice"]',
-      'muma':          '.price, [class*="product-price"]',
-      'dexco':         '.price, [class*="product-price"]',
-      'deca.':         '.price, [class*="product-price"]',
-      'electrolux':    '[class*="product-price"], [class*="price-info"], .price',
-      'fastshop':      '[class*="bestPrice"], [class*="price-best"], .price',
-      'brastemp':      '[class*="product-price"], [class*="price-info"], .price',
-      'samsung':       '[class*="price-info"], [class*="pd-price"], [class*="price"]',
     };
 
-    for (const [key, sel] of Object.entries(SITE_PRICE_SEL)) {
-      if (host.includes(key)) {
-        const el = document.querySelector(sel);
-        if (el) { const v = parsePrice(el.textContent); if (v > 0) return v; }
-        break;
+    // background.js injeta o extrator, tenta até a SPA hidratar, classifica e
+    // grava no orçamento. A resposta traz só o que o toast precisa mostrar.
+    chrome.runtime.sendMessage({ action: 'captureProduct' }, (res) => {
+      restore();
+
+      // O service worker do MV3 é encerrado quando ocioso; se ele não subir a
+      // tempo, lastError é preenchido e `res` vem undefined.
+      if (chrome.runtime.lastError || !res) {
+        showToast('⚠ Erro ao capturar. Tente adicionar manualmente.', 'warn');
+        return;
       }
-    }
-
-    // 5. Walk text nodes — pick most frequent R$ value
-    const prices = [];
-    const walk = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
-    let node;
-    while ((node = walk.nextNode())) {
-      const m = node.textContent.match(/R\$\s*([\d.,]+)/);
-      if (m) {
-        const v = parsePrice(m[1]);
-        if (v > 0 && v < 500000) prices.push(v);
+      if (!res.ok) {
+        showToast(res.reason === 'blocked'
+          ? '⚠ Não é possível capturar nesta página.'
+          : '⚠ Produto não identificado nesta página.', 'warn');
+        return;
       }
-    }
-    if (prices.length > 0) {
-      const freq = {};
-      prices.forEach(v => freq[v] = (freq[v] || 0) + 1);
-      return parseFloat(Object.entries(freq).sort((a, b) => b[1] - a[1])[0][0]);
-    }
-
-    return 0;
-  }
-
-  // ── Image ─────────────────────────────────────────────────────────────────
-  function getBestImage() {
-    // 1. og:image — canonical product image
-    const og = document.querySelector('meta[property="og:image"]')?.content;
-    if (og && !/logo|icon/.test(og.toLowerCase())) return og;
-
-    // 2. JSON-LD image
-    const ldImg = fromJsonLD(d => {
-      if (typeof d?.image === 'string' && d.image) return d.image;
-      if (d?.image?.url) return d.image.url;
-      if (Array.isArray(d?.image) && d.image.length)
-        return typeof d.image[0] === 'string' ? d.image[0] : (d.image[0]?.url || null);
-      return null;
+      // Nome truncado para o toast não estourar a largura
+      const short = (res.name || '').substring(0, 48);
+      showToast(res.deduped
+        ? `✓ Já no orçamento — quantidade: ${res.qty}`
+        : `✓ Adicionado: ${short}`, 'ok');
     });
-    if (ldImg) return ldImg;
+  });
 
-    // 3. Largest loaded image with sensible dimensions and aspect ratio
-    const candidates = [...document.images]
-      .map(img => ({
-        src: img.src || img.dataset.src || img.dataset.lazySrc || img.dataset.original || '',
-        area: img.naturalWidth * img.naturalHeight,
-        ratio: img.naturalWidth / (img.naturalHeight || 1),
-      }))
-      .filter(({ src, area, ratio }) => {
-        if (!src || area < 150 * 150) return false;
-        if (/logo|icon|sprite|banner|badge|avatar|header|footer/.test(src.toLowerCase())) return false;
-        return ratio >= 0.4 && ratio <= 2.5;
-      })
-      .sort((a, b) => b.area - a.area);
-
-    return candidates[0]?.src || '';
-  }
-
-  // ─── Category auto-guess ──────────────────────────────────────────────────
-  function guessCategory(name) {
-    const n = (name || '').toLowerCase();
-    if (/piso|cerâmic|porcelan|revestimento|argamassa|rejunte|tijolet|pedra|mármo|granito|parquet|laminado|deck|azulejo|grês/.test(n))
-      return 'revestimentos';
-    if (/vaso sanitário|bacia sanitária|cuba|torneira|ducha|chuveiro|sifão|mictório|válvula|box|banheira|fechadura|cadeado|registro|misturador|metalic/.test(n))
-      return 'loucas-metais';
-    if (/luminária|lâmpada|lustre|arandela|spot|trilho|pendente|led|plafon/.test(n))
-      return 'iluminacao';
-    if (/geladeira|refrigerador|fogão|forno|microondas|máquina de lavar|máquina de secar|lava.louça|lavadora|secadora|air fryer|aspirador|purificador|climatizador|ar condicionado|ventilador|exaustor|coifa|cooktop/.test(n))
-      return 'eletros';
-    if (/sofá|poltrona|mesa|cadeira|cama|colchão|armário|guarda.roupa|estante|rack|prateleira|criado.mudo|aparador|buffet|escrivaninha|banco|pufe|cabeceira|penteadeira/.test(n))
-      return 'moveis';
-    if (/tapete|quadro|almofada|cortina|persiana|espelho|toalha|lençol|fronha|edredom|travesseiro|enxoval|roupa de cama|vaso decorat|planta|interruptor|tomada|decoração|objeto decorat/.test(n))
-      return 'decoracao-enxoval';
-    return 'outros';
-  }
-
-  // ─── Toast notification ──────────────────────────────────────────────────
+  // ─── Toast ────────────────────────────────────────────────────────────────
+  // Substitui className inteiro (em vez de alternar classes) para que trocar de
+  // 'ok' para 'warn' limpe o estado anterior numa operação só. A transição de
+  // opacity na CSS faz a animação; remover as classes esconde de novo.
   let toastTimer = null;
   function showToast(msg, type = 'ok') {
     toast.textContent = msg;
     toast.className = 'sa-toast-' + type;
-    clearTimeout(toastTimer);
+    clearTimeout(toastTimer); // cancela o "esconder" de um toast anterior
     toastTimer = setTimeout(() => { toast.className = ''; }, 3500);
   }
 

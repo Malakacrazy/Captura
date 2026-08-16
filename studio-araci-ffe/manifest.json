@@ -1,14 +1,15 @@
 {
   "manifest_version": 3,
   "name": "Studio Araci · Orçamento FF&E",
-  "version": "1.0.0",
+  "version": "6.0",
   "description": "Capture produtos de lojas online e gere orçamentos com a identidade visual do Studio Araci.",
   "permissions": [
     "storage",
     "unlimitedStorage",
     "activeTab",
     "scripting",
-    "tabs"
+    "tabs",
+    "clipboardWrite"
   ],
   "host_permissions": [
     "<all_urls>"
@@ -17,25 +18,43 @@
     "default_popup": "popup.html",
     "default_title": "Studio Araci · Orçamento FF&E",
     "default_icon": {
-      "16":  "icons/icon16.png",
-      "48":  "icons/icon48.png",
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
       "128": "icons/icon128.png"
     }
   },
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
-      "js": ["content.js"],
-      "css": ["content.css"]
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "css": [
+        "content.css"
+      ]
     }
   ],
+  "commands": {
+    "toggle-fab": {
+      "suggested_key": {
+        "default": "Ctrl+Period"
+      },
+      "description": "Mostrar/ocultar botões Studio Araci"
+    }
+  },
   "background": {
     "service_worker": "background.js"
   },
   "web_accessible_resources": [
     {
-      "resources": ["print.html", "print.js", "library.html", "library.js", "icons/*"],
-      "matches": ["<all_urls>"]
+      "resources": [
+        "popup.html"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
     }
   ]
 }
