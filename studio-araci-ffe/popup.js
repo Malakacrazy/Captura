@@ -422,6 +422,7 @@ $('generateBtn').addEventListener('click', async () => {
 });
 
 $('libraryBtn').addEventListener('click', () => openExtPage('openLibrary', 'library.html'));
+$('settingsBtn').addEventListener('click', () => openExtPage('openOptions', 'options.html'));
 
 // ─── Boot ─────────────────────────────────────────────────────────────────────
 init();

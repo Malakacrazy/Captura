@@ -225,7 +225,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   const PAGES = {
     openPrint: 'print.html',
     openLibrary: 'library.html',
-    openPopup: 'popup.html'
+    openPopup: 'popup.html',
+    openOptions: 'options.html'
   };
   const page = PAGES[msg.action];
   if (page) {

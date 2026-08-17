@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Studio Araci · Configurações</title>
+  <style>
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    :root {
+      --ferrugem: #A35940;
+      --terracota: #9F4F39;
+      --areia: #E8DED4;
+      --areia-dark: #D6C9BC;
+      --duna: #CDB8A3;
+      --bg: #F5F0EB;
+      --text: #2E2620;
+      --muted: #7A6A60;
+      --border: #DDD0C4;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+      font-size: 13px;
+      min-height: 100vh;
+    }
+
+    .header {
+      background: var(--ferrugem);
+      padding: 14px 20px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .hdr-logo {
+      width: 28px;
+      height: 28px;
+      flex-shrink: 0;
+    }
+
+    .hdr-studio {
+      color: rgba(255, 255, 255, 0.7);
+      font-size: 9px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+
+    .hdr-title {
+      color: #fff;
+      font-size: 15px;
+      font-weight: 600;
+    }
+
+    .content {
+      max-width: 560px;
+      margin: 0 auto;
+      padding: 24px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .card {
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 18px 20px;
+    }
+
+    .card-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 4px;
+    }
+
+    .card-sub {
+      font-size: 11.5px;
+      color: var(--muted);
+      line-height: 1.6;
+      margin-bottom: 14px;
+    }
+
+    label {
+      display: block;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+
+    .field {
+      margin-bottom: 12px;
+    }
+
+    input[type="text"],
+    input[type="password"] {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      padding: 8px 10px;
+      font-size: 13px;
+      font-family: inherit;
+      color: var(--text);
+      background: #fff;
+      outline: none;
+    }
+
+    input:focus {
+      border-color: var(--ferrugem);
+    }
+
+    .btn {
+      padding: 8px 16px;
+      border-radius: 5px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      font-family: inherit;
+      transition: background 0.12s;
+    }
+
+    .btn-primary {
+      background: var(--ferrugem);
+      color: #fff;
+    }
+
+    .btn-primary:hover {
+      background: var(--terracota);
+    }
+
+    .btn-primary:disabled {
+      background: var(--duna);
+      cursor: not-allowed;
+    }
+
+    .budget-count {
+      font-size: 13px;
+      color: var(--text);
+      margin-bottom: 12px;
+    }
+
+    .budget-count strong {
+      color: var(--ferrugem);
+    }
+
+    .status-bar {
+      margin-top: 12px;
+      padding: 8px 10px;
+      border-radius: 5px;
+      font-size: 11.5px;
+      line-height: 1.5;
+      display: none;
+    }
+
+    .status-bar.ok {
+      display: block;
+      background: #f0faf5;
+      color: #166534;
+      border: 1px solid #bbf7d0;
+    }
+
+    .status-bar.warn {
+      display: block;
+      background: #fff7ed;
+      color: #9a3412;
+      border: 1px solid #fed7aa;
+    }
+  </style>
+</head>
+
+<body>
+
+  <header class="header">
+    <img class="hdr-logo" src="icons/icon128white.png" alt="Studio Araci" />
+    <div>
+      <div class="hdr-studio">Studio Araci</div>
+      <div class="hdr-title">Configurações</div>
+    </div>
+  </header>
+
+  <div class="content">
+    <div class="card">
+      <div class="card-title">Conexão com a plataforma</div>
+      <div class="card-sub">
+        Gere sua chave em <strong>/team</strong> na plataforma, seção "Chave de API (extensão Captura)" do seu
+        cadastro, e cole aqui.
+      </div>
+      <div class="field">
+        <label for="apiUrl">URL da API</label>
+        <input type="text" id="apiUrl" placeholder="https://api.studioaraci.com.br" />
+      </div>
+      <div class="field">
+        <label for="apiKey">Chave de API</label>
+        <input type="password" id="apiKey" placeholder="araci_..." autocomplete="off" />
+      </div>
+      <button class="btn btn-primary" id="saveSettingsBtn">Salvar configurações</button>
+      <div class="status-bar" id="settingsStatus"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Orçamento atual</div>
+      <div class="card-sub">
+        Envia os itens do orçamento em andamento (o mesmo que aparece no popup da extensão) como produtos no
+        catálogo da plataforma. Quantidade, categoria e ambiente não são enviados — só ficam no orçamento aqui na
+        extensão.
+      </div>
+      <div class="budget-count">
+        <strong id="budgetCount">0</strong> produto(s) no orçamento atual
+      </div>
+      <button class="btn btn-primary" id="sendBtn" disabled>☁ Enviar para a plataforma</button>
+      <div class="status-bar" id="sendStatus"></div>
+    </div>
+  </div>
+
+  <!-- platform-sync.js define getPlatformSettings/savePlatformSettings/sendProductsToPlatform -->
+  <script src="platform-sync.js"></script>
+  <script src="options.js"></script>
+</body>
+
+</html>

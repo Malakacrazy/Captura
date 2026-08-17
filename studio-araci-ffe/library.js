@@ -160,7 +160,38 @@ function buildCard(proj) {
     showToast('Na aba que abriu, clique em "📊 Salvar Excel"');
   });
 
-  actions.append(expandBtn, pdfBtn, xlsxBtn, shareBtn, loadBtn, delBtn);
+  // Envia os produtos DESTE projeto salvo (não o orçamento em andamento)
+  // para o catálogo da plataforma. Mesma função usada pela página de
+  // Configurações para o orçamento atual — ver platform-sync.js.
+  const sendBtn = document.createElement('button');
+  sendBtn.className = 'act-btn';
+  sendBtn.textContent = '☁ Enviar';
+  sendBtn.title = `Enviar "${proj.name}" para a plataforma`;
+  sendBtn.addEventListener('click', async () => {
+    const items = proj.products || [];
+    if (items.length === 0) {
+      showToast('⚠ Este projeto não tem itens.');
+      return;
+    }
+    sendBtn.disabled = true;
+    sendBtn.textContent = 'Enviando…';
+    const result = await sendProductsToPlatform(items);
+    sendBtn.disabled = false;
+    sendBtn.textContent = '☁ Enviar';
+
+    if (!result.configured) {
+      showToast('⚠ Configure a URL e a chave de API em ⚙ Configurações antes de enviar.');
+      return;
+    }
+    showToast(
+      result.failed === 0
+        ? `✓ ${result.sent} produto(s) enviado(s) para a plataforma`
+        : `⚠ ${result.sent} enviado(s), ${result.failed} falharam — veja o console para detalhes`
+    );
+    if (result.failed > 0) console.warn('Studio Araci · falhas ao enviar para a plataforma:', result.errors);
+  });
+
+  actions.append(expandBtn, pdfBtn, xlsxBtn, shareBtn, sendBtn, loadBtn, delBtn);
 
   const cardWrap = document.createElement('div');
   cardWrap.style.cssText = 'margin-bottom:10px';
@@ -841,6 +872,14 @@ $('updateBtn').addEventListener('click', async () => {
 // ─── Back ─────────────────────────────────────────────────────────────────────
 
 $('backBtn').addEventListener('click', () => window.close());
+
+$('settingsBtn').addEventListener('click', () => {
+  chrome.runtime.sendMessage({ action: 'openOptions' }, () => {
+    if (chrome.runtime.lastError) {
+      chrome.tabs.create({ url: chrome.runtime.getURL('options.html') });
+    }
+  });
+});
 
 // Os botões do topo agem sobre o ORÇAMENTO EM ANDAMENTO (o que aparece na
 // barra "Projeto atual"), por isso enviam payload nulo. Para exportar um
