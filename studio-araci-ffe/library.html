@@ -849,6 +849,7 @@
     <button class="btn btn-primary" id="exportBtn" style="background:#181F39">⬇ Exportar PDF</button>
     <button class="btn btn-secondary" id="exportXlsxBtn">📊 Exportar Excel</button>
     <button class="btn btn-secondary" id="importBtn">📋 Importar Projeto</button>
+    <button class="btn btn-secondary" id="settingsBtn" title="Configurações · Integração com a plataforma">⚙</button>
   </div>
 
   <div class="content">
@@ -887,8 +888,10 @@
     </div>
   </div>
 
-  <!-- categories.js define STUDIO_ARACI_CATEGORIES, usado ao validar importações -->
+  <!-- categories.js define STUDIO_ARACI_CATEGORIES, usado ao validar importações.
+       platform-sync.js define sendProductsToPlatform, usado pelo botão "☁ Enviar" de cada card. -->
   <script src="categories.js"></script>
+  <script src="platform-sync.js"></script>
   <script src="library.js"></script>
 </body>
 
