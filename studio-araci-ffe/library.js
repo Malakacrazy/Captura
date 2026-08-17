@@ -916,7 +916,7 @@ function closeImportModal() {
 //
 // Um arquivo .txt (ou um código colado) vem de fora e não é confiável: pode ter
 // sido editado à mão ou montado por terceiros. A versão anterior só conferia
-// `_studio_araci` / `_decorafit` e `Array.isArray(products)` e gravava o resto como veio.
+// `_studio_araci` / `_parse` e `Array.isArray(products)` e gravava o resto como veio.
 //
 // O risco concreto não é script injetado (todo texto entra por textContent/value
 // e a CSP do MV3 bloqueia javascript: em href), e sim os campos de URL: um `img`
@@ -986,7 +986,7 @@ function sanitizeImportedProduct(raw) {
 // Compartilhado pelos dois caminhos de importação (arquivo e código colado)
 // para que as regras e o comportamento sejam idênticos nos dois.
 async function saveImportedData(data) {
-  if (!data || (!data._studio_araci && !data._decorafit) || !Array.isArray(data.products)) {
+  if (!data || (!data._studio_araci && !data._parse) || !Array.isArray(data.products)) {
     closeImportModal();
     showToast('⚠ Este conteúdo não é um projeto Studio Araci.');
     return;
