@@ -1,40 +1,10 @@
-// print.js — Studio Araci FF&E
-// Página de impressão/exportação: renderiza a lista de produtos para o PDF e
-// gera a planilha .xlsx formatada a partir dos mesmos dados.
+// print.js — Studio Araci FF&E · Main Print Entry Point
+// Connects event listeners and initiates page rendering for PDF & Excel export.
 
-// ─── Fonte dos dados ─────────────────────────────────────────────────────────
-//
-// A página exporta o ORÇAMENTO EM ANDAMENTO por padrão, mas a Biblioteca também
-// exporta um projeto salvo específico. Para isso, quem abre esta página grava
-// antes a chave `printPayload`:
-//   • Biblioteca, exportando um projeto → printPayload = { name, products }
-//   • Popup, exportando o orçamento     → printPayload = null
-// A chave NÃO é apagada na leitura, para que recarregar esta aba continue
-// mostrando o mesmo conteúdo em vez de trocar de conjunto de dados.
-//
-// Carregada uma única vez e reaproveitada pelo PDF e pelo Excel — antes cada
-// caminho relia o storage por conta própria e podia divergir do que estava
-// desenhado na tela.
-let sheetData = { products: [], projectName: '' };
+// Initiate data loading and page rendering pipeline
+ready = render();
 
-// Promise resolvida quando sheetData já foi preenchido. Os handlers dos botões
-// dão await nela antes de ler os dados: sem isso, um clique disparado antes da
-// leitura assíncrona do storage terminar exportaria uma planilha vazia.
-let ready = null;
-
-async function loadData() {
-  const { products = [], projectName = '', printPayload = null } =
-    await chrome.storage.local.get(['products', 'projectName', 'printPayload']);
-
-  sheetData = printPayload
-    ? { products: printPayload.products || [], projectName: printPayload.name || '' }
-    : { products, projectName };
-}
-
-// ─── PDF Print ───────────────────────────────────────────────────────────────
-
-// A CSP do Manifest V3 bloqueia handlers inline (onclick="…"), então todos os
-// botões são ligados aqui via addEventListener.
+// Event listeners
 document.getElementById('printBtn').addEventListener('click', triggerPrint);
 document.getElementById('backBtn').addEventListener('click', () => window.close());
 
