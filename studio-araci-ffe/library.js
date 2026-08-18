@@ -161,34 +161,32 @@ function buildCard(proj) {
   });
 
   // Envia os produtos DESTE projeto salvo (não o orçamento em andamento)
-  // para o catálogo da plataforma. Mesma função usada pela página de
-  // Configurações para o orçamento atual — ver platform-sync.js.
+  // para o projeto/ambiente da plataforma escolhidos no painel abaixo —
+  // mesmo mecanismo (fetchPlatformProjects/Areas, sendProductsToPlatform)
+  // usado pela página de Configurações, ver platform-sync.js. Precisa de
+  // um projeto+ambiente escolhido primeiro (não dá pra enviar "para o
+  // catálogo geral" — sem vínculo a um ambiente o item nunca aparece no
+  // projeto que o usuário está de fato orçando), por isso abre um painel
+  // em vez de enviar direto no clique, mesmo padrão de toggle do
+  // expandBtn/itemsPanel logo abaixo.
   const sendBtn = document.createElement('button');
   sendBtn.className = 'act-btn';
   sendBtn.textContent = '☁ Enviar';
   sendBtn.title = `Enviar "${proj.name}" para a plataforma`;
-  sendBtn.addEventListener('click', async () => {
-    const items = proj.products || [];
-    if (items.length === 0) {
+
+  let sendPanel = null;
+  sendBtn.addEventListener('click', () => {
+    if (sendPanel) {
+      sendPanel.remove();
+      sendPanel = null;
+      return;
+    }
+    if ((proj.products || []).length === 0) {
       showToast('⚠ Este projeto não tem itens.');
       return;
     }
-    sendBtn.disabled = true;
-    sendBtn.textContent = 'Enviando…';
-    const result = await sendProductsToPlatform(items);
-    sendBtn.disabled = false;
-    sendBtn.textContent = '☁ Enviar';
-
-    if (!result.configured) {
-      showToast('⚠ Configure a URL e a chave de API em ⚙ Configurações antes de enviar.');
-      return;
-    }
-    showToast(
-      result.failed === 0
-        ? `✓ ${result.sent} produto(s) enviado(s) para a plataforma`
-        : `⚠ ${result.sent} enviado(s), ${result.failed} falharam — veja o console para detalhes`
-    );
-    if (result.failed > 0) console.warn('Studio Araci · falhas ao enviar para a plataforma:', result.errors);
+    sendPanel = buildSendPanel(proj, () => { sendPanel.remove(); sendPanel = null; });
+    cardWrap.appendChild(sendPanel);
   });
 
   actions.append(expandBtn, pdfBtn, xlsxBtn, shareBtn, sendBtn, loadBtn, delBtn);
@@ -228,6 +226,182 @@ function buildCard(proj) {
   });
 
   return cardWrap;
+}
+
+// ─── Painel de envio (projeto/ambiente na plataforma) ──────────────────────────
+//
+// Aberto pelo botão "☁ Enviar" de um card. Projeto e ambiente são
+// escolhidos aqui, não guardados como padrão em lugar nenhum -- cada
+// projeto salvo na Biblioteca pode ir para um projeto diferente na
+// plataforma, então perguntar de novo a cada envio é o comportamento
+// certo, não redundância. `onClose` é chamado depois de um envio
+// bem-sucedido pra fechar o painel sozinho; erro mantém o painel aberto
+// (com o status visível) pra tentar de novo sem reconfigurar do zero.
+function buildSendPanel(proj, onClose) {
+  const panel = document.createElement('div');
+  panel.className = 'send-panel';
+
+  const row = document.createElement('div');
+  row.className = 'send-panel-row';
+
+  const projectSelect = document.createElement('select');
+  projectSelect.innerHTML = '<option value="">Carregando projetos…</option>';
+  projectSelect.disabled = true;
+
+  const areaSelect = document.createElement('select');
+  areaSelect.innerHTML = '<option value="">Selecione um projeto primeiro…</option>';
+  areaSelect.disabled = true;
+
+  row.append(projectSelect, areaSelect);
+
+  const toggleNewAreaBtn = document.createElement('button');
+  toggleNewAreaBtn.type = 'button';
+  toggleNewAreaBtn.className = 'act-btn';
+  toggleNewAreaBtn.textContent = '+ Criar novo ambiente';
+  toggleNewAreaBtn.style.display = 'none';
+  toggleNewAreaBtn.style.alignSelf = 'flex-start';
+
+  const newAreaRow = document.createElement('div');
+  newAreaRow.className = 'send-new-area-row';
+  newAreaRow.style.display = 'none';
+
+  const newAreaInput = document.createElement('input');
+  newAreaInput.type = 'text';
+  newAreaInput.placeholder = 'Ex: Sala de estar';
+
+  const createAreaBtn = document.createElement('button');
+  createAreaBtn.type = 'button';
+  createAreaBtn.className = 'act-btn';
+  createAreaBtn.textContent = 'Criar';
+
+  newAreaRow.append(newAreaInput, createAreaBtn);
+
+  const actionsRow = document.createElement('div');
+  actionsRow.className = 'send-panel-actions';
+
+  const confirmBtn = document.createElement('button');
+  confirmBtn.type = 'button';
+  confirmBtn.className = 'btn btn-primary';
+  confirmBtn.disabled = true;
+  const itemCount = (proj.products || []).length;
+  confirmBtn.textContent = `☁ Enviar ${itemCount} ${itemCount === 1 ? 'item' : 'itens'}`;
+
+  const status = document.createElement('span');
+  status.className = 'send-panel-status';
+
+  actionsRow.append(confirmBtn, status);
+  panel.append(row, toggleNewAreaBtn, newAreaRow, actionsRow);
+
+  function setStatus(msg, type) {
+    status.textContent = msg;
+    status.className = 'send-panel-status' + (type ? ' ' + type : '');
+  }
+
+  function refreshConfirmState() {
+    confirmBtn.disabled = !areaSelect.value;
+  }
+
+  async function loadAreasInto(projectId) {
+    areaSelect.innerHTML = '<option value="">Carregando…</option>';
+    areaSelect.disabled = true;
+    toggleNewAreaBtn.style.display = 'none';
+    const areas = await fetchPlatformAreas(projectId);
+    areaSelect.innerHTML = '<option value="">Selecione…</option>';
+    for (const a of areas) {
+      const opt = document.createElement('option');
+      opt.value = a.id;
+      opt.textContent = a.name;
+      areaSelect.appendChild(opt);
+    }
+    areaSelect.disabled = false;
+    toggleNewAreaBtn.style.display = '';
+    refreshConfirmState();
+  }
+
+  projectSelect.addEventListener('change', () => {
+    const projectId = projectSelect.value;
+    if (!projectId) {
+      areaSelect.innerHTML = '<option value="">Selecione um projeto primeiro…</option>';
+      areaSelect.disabled = true;
+      toggleNewAreaBtn.style.display = 'none';
+      refreshConfirmState();
+      return;
+    }
+    loadAreasInto(projectId);
+  });
+
+  areaSelect.addEventListener('change', refreshConfirmState);
+
+  toggleNewAreaBtn.addEventListener('click', () => {
+    newAreaRow.style.display = newAreaRow.style.display === 'none' ? 'flex' : 'none';
+    if (newAreaRow.style.display === 'flex') newAreaInput.focus();
+  });
+
+  createAreaBtn.addEventListener('click', async () => {
+    const projectId = projectSelect.value;
+    const name = newAreaInput.value.trim();
+    if (!projectId || !name) {
+      setStatus('⚠ Escolha o projeto e digite um nome para o ambiente.', 'warn');
+      return;
+    }
+    createAreaBtn.disabled = true;
+    try {
+      const area = await createPlatformArea(projectId, name);
+      await loadAreasInto(projectId);
+      areaSelect.value = area.id;
+      refreshConfirmState();
+      newAreaRow.style.display = 'none';
+      newAreaInput.value = '';
+      setStatus(`✓ Ambiente "${area.name}" criado.`, 'ok');
+    } catch (e) {
+      setStatus(`⚠ ${e.message}`, 'warn');
+    } finally {
+      createAreaBtn.disabled = false;
+    }
+  });
+
+  confirmBtn.addEventListener('click', async () => {
+    const areaId = areaSelect.value;
+    if (!areaId) return;
+    confirmBtn.disabled = true;
+    confirmBtn.textContent = 'Enviando…';
+    const result = await sendProductsToPlatform(proj.products || [], areaId);
+    confirmBtn.textContent = `☁ Enviar ${itemCount} ${itemCount === 1 ? 'item' : 'itens'}`;
+
+    if (!result.configured) {
+      setStatus('⚠ Configure a URL e a chave de API em ⚙ Configurações antes de enviar.', 'warn');
+      confirmBtn.disabled = false;
+      return;
+    }
+    if (result.failed === 0) {
+      showToast(`✓ ${result.sent} produto(s) enviado(s) para a plataforma`);
+      onClose();
+      return;
+    }
+    setStatus(`⚠ ${result.sent} enviado(s), ${result.failed} falharam: ${result.errors.slice(0, 2).join('; ')}`, 'warn');
+    console.warn('Studio Araci · falhas ao enviar para a plataforma:', result.errors);
+    confirmBtn.disabled = false;
+  });
+
+  // Carrega os projetos por último, depois de todo o painel já montado —
+  // os selects existem desde o início (mostrando "Carregando…"), só o
+  // conteúdo chega depois.
+  fetchPlatformProjects().then((projects) => {
+    if (projects.length === 0) {
+      projectSelect.innerHTML = '<option value="">Nenhum projeto — configure a integração em ⚙</option>';
+      return;
+    }
+    projectSelect.innerHTML = '<option value="">Selecione…</option>';
+    for (const p of projects) {
+      const opt = document.createElement('option');
+      opt.value = p.id;
+      opt.textContent = p.name;
+      projectSelect.appendChild(opt);
+    }
+    projectSelect.disabled = false;
+  });
+
+  return panel;
 }
 
 // ─── Ambientes ────────────────────────────────────────────────────────────────
