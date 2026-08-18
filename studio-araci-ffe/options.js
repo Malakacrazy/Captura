@@ -1,8 +1,10 @@
 // options.js — Studio Araci FF&E · Página de Configurações
 //
 // getPlatformSettings/savePlatformSettings/fetchPlatformProjects/
-// fetchPlatformAreas/createPlatformArea/sendProductsToPlatform vêm de
-// platform-sync.js (carregado antes deste script em options.html).
+// sendProductsToPlatform vêm de platform-sync.js (carregado antes deste
+// script em options.html). O ambiente de cada item é resolvido pela
+// própria sendProductsToPlatform a partir do campo "Ambiente" que o
+// orçamento já tem — esta tela só escolhe o Projeto.
 
 const $ = id => document.getElementById(id);
 
@@ -42,110 +44,58 @@ $('saveSettingsBtn').addEventListener('click', async () => {
   loadProjects();
 });
 
-// ─── Projeto / Ambiente ─────────────────────────────────────────────────
+// ─── Projeto ──────────────────────────────────────────────────────────────
 
 async function loadProjects() {
-  const projects = await fetchPlatformProjects();
   const select = $('sendProjectId');
-  select.innerHTML = '<option value="">Selecione…</option>';
+  select.innerHTML = '<option value="">Carregando…</option>';
+  let projects;
+  try {
+    projects = await fetchPlatformProjects();
+  } catch (e) {
+    // Sem isso, uma falha aqui deixava o select preso no placeholder
+    // estático do HTML ("Selecione…") -- indistinguível de "a conta não
+    // tem projeto nenhum" e sem nenhum aviso visível do motivo real.
+    select.innerHTML = '<option value="">Erro ao carregar — veja abaixo</option>';
+    showSendStatus(`⚠ ${e.message}`, 'warn');
+    refreshSendReadiness();
+    return;
+  }
+  select.innerHTML = projects.length === 0
+    ? '<option value="">Nenhum projeto na plataforma</option>'
+    : '<option value="">Selecione…</option>';
   for (const p of projects) {
     const opt = document.createElement('option');
     opt.value = p.id;
     opt.textContent = p.name;
     select.appendChild(opt);
   }
-  resetAreaSelect();
-}
-
-function resetAreaSelect() {
-  const select = $('sendAreaId');
-  select.innerHTML = '<option value="">Selecione um projeto primeiro…</option>';
-  select.disabled = true;
-  $('toggleNewAreaBtn').style.display = 'none';
-  hideNewAreaRow();
   refreshSendReadiness();
 }
 
-async function loadAreas(projectId) {
-  const areas = await fetchPlatformAreas(projectId);
-  const select = $('sendAreaId');
-  select.innerHTML = '<option value="">Selecione…</option>';
-  for (const a of areas) {
-    const opt = document.createElement('option');
-    opt.value = a.id;
-    opt.textContent = a.name;
-    select.appendChild(opt);
-  }
-  select.disabled = false;
-  $('toggleNewAreaBtn').style.display = '';
-  refreshSendReadiness();
-}
-
-$('sendProjectId').addEventListener('change', () => {
-  const projectId = $('sendProjectId').value;
-  if (!projectId) {
-    resetAreaSelect();
-    return;
-  }
-  loadAreas(projectId);
-});
-
-$('sendAreaId').addEventListener('change', refreshSendReadiness);
-
-function hideNewAreaRow() {
-  $('newAreaRow').style.display = 'none';
-  $('newAreaName').value = '';
-}
-
-$('toggleNewAreaBtn').addEventListener('click', () => {
-  const row = $('newAreaRow');
-  row.style.display = row.style.display === 'none' ? 'flex' : 'none';
-  if (row.style.display === 'flex') $('newAreaName').focus();
-});
-
-$('createAreaBtn').addEventListener('click', async () => {
-  const projectId = $('sendProjectId').value;
-  const name = $('newAreaName').value.trim();
-  if (!projectId || !name) {
-    showSendStatus('⚠ Escolha o projeto e digite um nome para o ambiente.', 'warn');
-    return;
-  }
-  $('createAreaBtn').disabled = true;
-  try {
-    const area = await createPlatformArea(projectId, name);
-    await loadAreas(projectId);
-    $('sendAreaId').value = area.id;
-    hideNewAreaRow();
-    refreshSendReadiness();
-    showSendStatus(`✓ Ambiente "${area.name}" criado.`, 'ok');
-  } catch (e) {
-    showSendStatus(`⚠ ${e.message}`, 'warn');
-  } finally {
-    $('createAreaBtn').disabled = false;
-  }
-});
+$('sendProjectId').addEventListener('change', refreshSendReadiness);
 
 // ─── Envio ───────────────────────────────────────────────────────────────
 
-// O botão de enviar reflete "tem itens no orçamento" + "um ambiente foi
+// O botão de enviar reflete "tem itens no orçamento" + "um projeto foi
 // escolhido" — se a conexão (URL/chave) estiver faltando, isso só é
 // descoberto (e avisado) no clique, pra não duplicar essa checagem aqui
 // e em sendProductsToPlatform.
 async function refreshSendReadiness() {
   const { products = [] } = await chrome.storage.local.get('products');
   $('budgetCount').textContent = products.length;
-  $('sendBtn').disabled = products.length === 0 || !$('sendAreaId').value;
+  $('sendBtn').disabled = products.length === 0 || !$('sendProjectId').value;
 }
 
 $('sendBtn').addEventListener('click', async () => {
   const { products = [] } = await chrome.storage.local.get('products');
-  const areaId = $('sendAreaId').value;
-  if (products.length === 0 || !areaId) return;
+  const projectId = $('sendProjectId').value;
+  if (products.length === 0 || !projectId) return;
 
   $('sendBtn').disabled = true;
   $('sendBtn').textContent = 'Enviando…';
 
-  const result = await sendProductsToPlatform(products, areaId);
+  const result = await sendProductsToPlatform(products, projectId);
 
   $('sendBtn').textContent = '☁ Enviar para a plataforma';
   await refreshSendReadiness();
@@ -154,12 +104,15 @@ $('sendBtn').addEventListener('click', async () => {
     showSendStatus('⚠ Configure a URL e a chave de API acima antes de enviar.', 'warn');
     return;
   }
+  const areasNote = result.areasCreated.length > 0
+    ? ` Ambiente(s) criado(s): ${result.areasCreated.join(', ')}.`
+    : '';
   if (result.failed === 0) {
-    showSendStatus(`✓ ${result.sent} produto(s) enviado(s) com sucesso.`, 'ok');
+    showSendStatus(`✓ ${result.sent} produto(s) enviado(s) com sucesso.${areasNote}`, 'ok');
   } else {
     const preview = result.errors.slice(0, 3).join('; ');
     showSendStatus(
-      `⚠ ${result.sent} enviado(s), ${result.failed} falharam: ${preview}${result.errors.length > 3 ? '…' : ''}`,
+      `⚠ ${result.sent} enviado(s), ${result.failed} falharam: ${preview}${result.errors.length > 3 ? '…' : ''}${areasNote}`,
       'warn'
     );
   }

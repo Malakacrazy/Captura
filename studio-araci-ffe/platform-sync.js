@@ -72,54 +72,65 @@ async function platformFetch(path, apiUrl, apiKey, init = {}) {
 }
 
 // Lista os projetos da conta -- usado para o seletor "Projeto" antes de
-// enviar. [] em vez de lançar erro em qualquer falha (URL/chave ainda não
-// configuradas, rede fora, etc.): quem chama já sabe tratar lista vazia
-// (mostra "configure a integração" ou "nenhum projeto"), não precisa de
-// um segundo caminho de erro só pra isso.
+// enviar. Lança em erro em vez de devolver [] silenciosamente: uma lista
+// vazia por "não configurado", "chave errada/expirada", "API fora do ar"
+// e "conta genuinamente sem projetos" são situações completamente
+// diferentes, e engolir a diferença foi o que tornou "não aparece nenhum
+// projeto" impossível de diagnosticar da tela -- quem chama decide como
+// mostrar o erro, mas precisa recebê-lo.
 async function fetchPlatformProjects() {
   const { apiUrl, apiKey } = await getPlatformSettings();
-  if (!apiUrl || !apiKey) return [];
-  try {
-    const res = await platformFetch('/v1/projects', apiUrl, apiKey);
-    if (!res.ok) return [];
-    const body = await res.json();
-    return body.data || [];
-  } catch {
-    return [];
+  if (!apiUrl || !apiKey) {
+    throw new Error('Configure a URL e a chave de API em ⚙ Configurações antes de escolher um projeto.');
   }
+  let res;
+  try {
+    res = await platformFetch('/v1/projects', apiUrl, apiKey);
+  } catch (e) {
+    throw new Error(`Não foi possível conectar em ${apiUrl} (${e?.message || e}). A API está no ar e acessível deste navegador?`);
+  }
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error(body?.error?.message || `A plataforma respondeu com erro ao listar projetos (HTTP ${res.status}).`);
+  }
+  const body = await res.json();
+  return body.data || [];
 }
 
 async function fetchPlatformAreas(projectId) {
   const { apiUrl, apiKey } = await getPlatformSettings();
   if (!apiUrl || !apiKey || !projectId) return [];
+  let res;
   try {
-    const res = await platformFetch(`/v1/projects/${projectId}/areas`, apiUrl, apiKey);
-    if (!res.ok) return [];
-    const body = await res.json();
-    return body.data || [];
-  } catch {
-    return [];
+    res = await platformFetch(`/v1/projects/${projectId}/areas`, apiUrl, apiKey);
+  } catch (e) {
+    throw new Error(`Não foi possível conectar em ${apiUrl} (${e?.message || e}).`);
   }
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error(body?.error?.message || `A plataforma respondeu com erro ao listar ambientes (HTTP ${res.status}).`);
+  }
+  const body = await res.json();
+  return body.data || [];
 }
 
-// Diferente das duas acima, esta lança em erro -- criar um ambiente é uma
-// ação explícita do usuário (escreveu um nome, clicou "Criar"), então a
-// tela chamadora precisa saber que falhou para avisar, não só ver uma
-// lista vazia sem explicação.
-async function createPlatformArea(projectId, name) {
-  const { apiUrl, apiKey } = await getPlatformSettings();
-  if (!apiUrl || !apiKey) throw new Error('Configure a URL e a chave de API antes de criar um ambiente.');
+// Cria um ambiente na API e devolve o registro criado. Lança em erro (ao
+// contrário das duas funções acima): quem chama precisa saber se a
+// criação falhou pra não seguir usando um id inexistente.
+async function createPlatformArea(projectId, name, apiUrl, apiKey) {
   const res = await platformFetch(`/v1/projects/${projectId}/areas`, apiUrl, apiKey, {
     method: 'POST',
     body: JSON.stringify({ name })
   });
   if (!res.ok) {
     const body = await res.json().catch(() => null);
-    throw new Error(body?.error?.message || `Não foi possível criar o ambiente (HTTP ${res.status}).`);
+    throw new Error(body?.error?.message || `Não foi possível criar o ambiente "${name}" (HTTP ${res.status}).`);
   }
   const body = await res.json();
   return body.data;
 }
+
+const AMBIENTE_PADRAO_SEM_TAG = 'Geral'; // bucket para produtos sem nenhum ambiente marcado
 
 // Envia um produto por vez (a API não tem endpoint de criação em lote) e
 // segue mesmo se algum item falhar, para que um erro isolado (ex.: nome
@@ -127,35 +138,73 @@ async function createPlatformArea(projectId, name) {
 // "faltou configurar URL/chave" de "configurado, mas tudo falhou" — os
 // dois têm 0 enviados, mas pedem mensagens diferentes para quem chama.
 //
-// areaId é obrigatório: sem ele, o produto entrava só no catálogo geral
-// da conta e nunca aparecia no projeto que o usuário estava de fato
-// orçando (POST /v1/products sozinho não vincula a nada). Cada produto
-// vira, agora, DOIS passos -- upsert no catálogo (POST /v1/products,
-// que já deduplica por sourceUrl do lado da API) seguido de criar OU
-// atualizar a linha do carrinho no ambiente escolhido.
+// Recebe projectId, NÃO areaId: os ambientes vêm do PRÓPRIO orçamento da
+// extensão (o campo "Ambiente" que o usuário já preenche por produto,
+// ver library-items.js), não de uma lista escolhida à mão na hora de
+// enviar -- a extensão já sabe pra qual cômodo cada item é, então é ela
+// quem deveria mandar essa informação pra plataforma, não o contrário
+// (a versão anterior pedia pro usuário escolher um ambiente já cadastrado
+// na plataforma antes de mandar, ignorando o que ele já tinha digitado
+// aqui). Produto sem nenhum ambiente marcado cai no bucket "Geral". Um
+// produto com múltiplos ambientes (`ambiente: ["Cozinha", "Lavanderia"]`)
+// gera uma ProductSpecification em CADA área correspondente, com a mesma
+// quantidade em cada uma -- a extensão não guarda quantidade por
+// ambiente, só por produto, então replicar a quantidade total em cada
+// área é o que já é mostrado na própria linha do orçamento.
 //
-// A escolha entre criar e atualizar a especificação é feita AQUI, não no
-// lado da API: a API não deduplica ProductSpecification de propósito --
-// a própria plataforma já usa duas linhas do mesmo produto na mesma área
-// para representar rodadas de aprovação diferentes (ver
+// Ambientes são resolvidos por NOME dentro do projeto escolhido: se já
+// existe uma área com aquele nome (comparação sem diferenciar
+// maiúsc./minúsc. e espaços nas pontas — o autocompletar de ambiente já
+// empurra pra nomes consistentes, mas não garante), reaproveita; senão
+// cria uma nova. A lista de áreas do projeto é buscada uma vez só no
+// início, não uma vez por produto.
+//
+// A escolha entre criar e atualizar uma ProductSpecification é feita
+// AQUI, não no lado da API: a API não deduplica ProductSpecification de
+// propósito -- a própria plataforma já usa duas linhas do mesmo produto
+// na mesma área para representar rodadas de aprovação diferentes (ver
 // SpecificationsService), um caso de uso real que uma deduplicação no
 // servidor quebraria. Reenviar o MESMO orçamento da extensão pro MESMO
 // ambiente é um caso mais estreito -- é literalmente a mesma linha sendo
 // atualizada -- então a extensão busca a especificação existente (por
-// productId dentro da área) antes de decidir POST (nova linha) ou PATCH
-// (atualiza quantidade/preço da linha já enviada antes).
-async function sendProductsToPlatform(products, areaId) {
+// productId dentro de cada área) antes de decidir POST (nova linha) ou
+// PATCH (atualiza quantidade/preço da linha já enviada antes).
+async function sendProductsToPlatform(products, projectId) {
   const { apiUrl, apiKey } = await getPlatformSettings();
   if (!apiUrl || !apiKey) {
-    return { configured: false, sent: 0, failed: 0, errors: [] };
+    return { configured: false, sent: 0, failed: 0, errors: [], areasCreated: [] };
   }
-  if (!areaId) {
-    return { configured: true, sent: 0, failed: 0, errors: ['Selecione o projeto e o ambiente antes de enviar.'] };
+  if (!projectId) {
+    // failed precisa bater com errors.length aqui -- quem chama decide
+    // "sucesso" vs. "erro" olhando failed === 0, e com failed:0 essa
+    // mensagem virava "✓ 0 produto(s) enviado(s) com sucesso", escondendo
+    // o motivo real por trás de uma marca de sucesso.
+    return { configured: true, sent: 0, failed: 1, errors: ['Selecione o projeto antes de enviar.'], areasCreated: [] };
   }
 
-  const existingSpecsRes = await platformFetch(`/v1/areas/${areaId}/specifications`, apiUrl, apiKey);
-  const existingSpecs = existingSpecsRes.ok ? (await existingSpecsRes.json()).data || [] : [];
-  const specIdByProductId = new Map(existingSpecs.map((s) => [s.productId, s.id]));
+  // areasByName: nome normalizado (trim + minúsculo) → { id, name, specsByProductId }.
+  // specsByProductId é carregado sob demanda (só quando a área é de fato
+  // usada), não pra todas as áreas do projeto de uma vez.
+  const existingAreas = await fetchPlatformAreas(projectId).catch(() => []);
+  const areasByName = new Map(existingAreas.map((a) => [a.name.trim().toLowerCase(), { id: a.id, name: a.name, specsByProductId: null }]));
+  const areasCreated = [];
+
+  async function resolveArea(name) {
+    const key = name.trim().toLowerCase();
+    let area = areasByName.get(key);
+    if (!area) {
+      const created = await createPlatformArea(projectId, name, apiUrl, apiKey);
+      area = { id: created.id, name: created.name, specsByProductId: null };
+      areasByName.set(key, area);
+      areasCreated.push(created.name);
+    }
+    if (!area.specsByProductId) {
+      const specsRes = await platformFetch(`/v1/areas/${area.id}/specifications`, apiUrl, apiKey);
+      const specs = specsRes.ok ? (await specsRes.json()).data || [] : [];
+      area.specsByProductId = new Map(specs.map((s) => [s.productId, s.id]));
+    }
+    return area;
+  }
 
   let sent = 0;
   const errors = [];
@@ -179,36 +228,53 @@ async function sendProductsToPlatform(products, areaId) {
       const productBody = await productRes.json();
       const productId = productBody.data.id;
 
+      const ambientes = Array.isArray(raw.ambiente) && raw.ambiente.length > 0
+        ? raw.ambiente.filter((a) => typeof a === 'string' && a.trim())
+        : [AMBIENTE_PADRAO_SEM_TAG];
+
       const specData = {
         quantity: Math.max(1, Math.floor(Number(raw.qty) || 1)),
         ...(product.price ? { unitPrice: product.price } : {})
       };
-      const existingSpecId = specIdByProductId.get(productId);
-      const specRes = existingSpecId
-        ? await platformFetch(`/v1/specifications/${existingSpecId}`, apiUrl, apiKey, {
-            method: 'PATCH',
-            body: JSON.stringify(specData)
-          })
-        : await platformFetch(`/v1/areas/${areaId}/specifications`, apiUrl, apiKey, {
-            method: 'POST',
-            body: JSON.stringify({ productId, ...specData })
-          });
-      if (!specRes.ok) {
-        const body = await specRes.json().catch(() => null);
-        // O produto já existe no catálogo neste ponto (passo anterior deu certo) --
-        // só a linha do carrinho no ambiente que falhou. Vale dizer isso
-        // explicitamente, senão "falhou" sugere que nada aconteceu, quando na
-        // verdade ficou parcial.
-        const acao = existingSpecId ? 'atualizado no catálogo, mas não foi possível atualizar a linha do ambiente' : 'criado no catálogo, mas não vinculado ao ambiente';
-        errors.push(`"${product.name}": ${acao} (${body?.error?.message || `HTTP ${specRes.status}`})`);
-        continue;
+
+      let placedInAtLeastOneArea = false;
+      for (const ambienteName of ambientes) {
+        let area;
+        try {
+          area = await resolveArea(ambienteName);
+        } catch (e) {
+          errors.push(`"${product.name}" → "${ambienteName}": ${e.message}`);
+          continue;
+        }
+
+        const existingSpecId = area.specsByProductId.get(productId);
+        const specRes = existingSpecId
+          ? await platformFetch(`/v1/specifications/${existingSpecId}`, apiUrl, apiKey, {
+              method: 'PATCH',
+              body: JSON.stringify(specData)
+            })
+          : await platformFetch(`/v1/areas/${area.id}/specifications`, apiUrl, apiKey, {
+              method: 'POST',
+              body: JSON.stringify({ productId, ...specData })
+            });
+        if (!specRes.ok) {
+          const body = await specRes.json().catch(() => null);
+          errors.push(`"${product.name}" → "${area.name}": ${body?.error?.message || `HTTP ${specRes.status}`}`);
+          continue;
+        }
+        placedInAtLeastOneArea = true;
       }
 
-      sent++;
+      // O produto já existe no catálogo neste ponto mesmo se todo o resto
+      // falhar (o POST /v1/products acima deu certo) -- só não entrou em
+      // nenhum ambiente. sent conta "chegou a algum lugar no projeto",
+      // não "chegou ao catálogo", que é o que de fato importa pro
+      // usuário conferir depois na tela de FF&E do projeto.
+      if (placedInAtLeastOneArea) sent++;
     } catch (e) {
       errors.push(`"${product.name}": erro de rede (${e?.message || e})`);
     }
   }
 
-  return { configured: true, sent, failed: errors.length, errors };
+  return { configured: true, sent, failed: errors.length, errors, areasCreated };
 }

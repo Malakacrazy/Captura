@@ -129,31 +129,6 @@
       background: var(--areia);
     }
 
-    .new-area-row {
-      display: flex;
-      gap: 6px;
-      margin-top: 6px;
-    }
-
-    .new-area-row input {
-      flex: 1;
-    }
-
-    .btn-link {
-      background: none;
-      border: none;
-      color: var(--ferrugem);
-      font-size: 11px;
-      font-weight: 600;
-      cursor: pointer;
-      padding: 4px 0;
-      font-family: inherit;
-    }
-
-    .btn-link:hover {
-      text-decoration: underline;
-    }
-
     .btn {
       padding: 8px 16px;
       border-radius: 5px;
@@ -246,8 +221,10 @@
     <div class="card">
       <div class="card-title">Orçamento atual</div>
       <div class="card-sub">
-        Envia os itens do orçamento em andamento (o mesmo que aparece no popup da extensão) para o projeto e
-        ambiente escolhidos abaixo, na plataforma. Categoria, unidade e observações não são enviadas — só ficam no
+        Envia os itens do orçamento em andamento (o mesmo que aparece no popup da extensão) para o projeto
+        escolhido abaixo, na plataforma. O ambiente de cada item vem do campo "Ambiente" já preenchido no
+        orçamento — um ambiente que ainda não existe nesse projeto é criado automaticamente; item sem nenhum
+        ambiente marcado vai para "Geral". Categoria, unidade e observações não são enviadas — só ficam no
         orçamento aqui na extensão.
       </div>
       <div class="budget-count">
@@ -259,17 +236,6 @@
         <select id="sendProjectId">
           <option value="">Selecione…</option>
         </select>
-      </div>
-      <div class="field">
-        <label for="sendAreaId">Ambiente</label>
-        <select id="sendAreaId" disabled>
-          <option value="">Selecione um projeto primeiro…</option>
-        </select>
-        <button type="button" class="btn-link" id="toggleNewAreaBtn" style="display:none">+ Criar novo ambiente</button>
-        <div class="new-area-row" id="newAreaRow" style="display:none">
-          <input type="text" id="newAreaName" placeholder="Ex: Sala de estar" />
-          <button type="button" class="btn btn-primary" id="createAreaBtn">Criar</button>
-        </div>
       </div>
 
       <button class="btn btn-primary" id="sendBtn" disabled>☁ Enviar para a plataforma</button>

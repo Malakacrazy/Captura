@@ -127,32 +127,28 @@ function buildCard(proj) {
     showToast('Na aba que abriu, clique em "📊 Salvar Excel"');
   });
 
+  // Painel (buildSendPanel, em library-platform-send.js) pede só o
+  // Projeto na plataforma -- o ambiente de cada item vem do próprio
+  // orçamento, não é escolhido aqui. Toggle igual ao expandBtn/itemsPanel
+  // logo abaixo: primeiro clique abre, segundo fecha.
   const sendBtn = document.createElement('button');
   sendBtn.className = 'act-btn';
   sendBtn.textContent = '☁ Enviar';
   sendBtn.title = `Enviar "${proj.name}" para a plataforma`;
-  sendBtn.addEventListener('click', async () => {
-    const items = proj.products || [];
-    if (items.length === 0) {
+
+  let sendPanel = null;
+  sendBtn.addEventListener('click', () => {
+    if (sendPanel) {
+      sendPanel.remove();
+      sendPanel = null;
+      return;
+    }
+    if ((proj.products || []).length === 0) {
       showToast('⚠ Este projeto não tem itens.');
       return;
     }
-    sendBtn.disabled = true;
-    sendBtn.textContent = 'Enviando…';
-    const result = await sendProductsToPlatform(items);
-    sendBtn.disabled = false;
-    sendBtn.textContent = '☁ Enviar';
-
-    if (!result.configured) {
-      showToast('⚠ Configure a URL e a chave de API em ⚙ Configurações antes de enviar.');
-      return;
-    }
-    showToast(
-      result.failed === 0
-        ? `✓ ${result.sent} produto(s) enviado(s) para a plataforma`
-        : `⚠ ${result.sent} enviado(s), ${result.failed} falharam — veja o console para detalhes`
-    );
-    if (result.failed > 0) console.warn('Studio Araci · falhas ao enviar para a plataforma:', result.errors);
+    sendPanel = buildSendPanel(proj, () => { sendPanel.remove(); sendPanel = null; });
+    cardWrap.appendChild(sendPanel);
   });
 
   actions.append(expandBtn, pdfBtn, xlsxBtn, shareBtn, sendBtn, loadBtn, delBtn);
