@@ -334,6 +334,70 @@
     }
 
     /* ── Toast ────────────────────────────────────────────── */
+    /* ── Painel de envio (projeto/ambiente na plataforma) ──── */
+    .send-panel {
+      border-top: 1px solid var(--border);
+      margin-top: 12px;
+      padding-top: 10px;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .send-panel-row {
+      display: flex;
+      gap: 8px;
+    }
+
+    .send-panel select,
+    .send-new-area-row input {
+      flex: 1;
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      padding: 6px 8px;
+      font-size: 12px;
+      font-family: inherit;
+      color: var(--text);
+      background: #fff;
+      outline: none;
+    }
+
+    .send-panel select:focus,
+    .send-new-area-row input:focus {
+      border-color: var(--ferrugem);
+    }
+
+    .send-panel select:disabled {
+      color: var(--muted);
+      background: var(--areia);
+    }
+
+    .send-new-area-row {
+      display: flex;
+      gap: 6px;
+    }
+
+    .send-panel-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .send-panel-status {
+      font-size: 11px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    .send-panel-status.warn {
+      color: #9a3412;
+    }
+
+    .send-panel-status.ok {
+      color: #166534;
+    }
+
     /* ── Items table ──────────────────────────────────────── */
     .items-panel {
       border-top: 1px solid var(--border);
@@ -888,10 +952,12 @@
     </div>
   </div>
 
-  <!-- categories.js define STUDIO_ARACI_CATEGORIES, usado ao validar importações.
-       platform-sync.js define sendProductsToPlatform, usado pelo botão "☁ Enviar" de cada card. -->
   <script src="categories.js"></script>
   <script src="platform-sync.js"></script>
+  <script src="library-utils.js"></script>
+  <script src="library-ambientes.js"></script>
+  <script src="library-import-export.js"></script>
+  <script src="library-items.js"></script>
   <script src="library.js"></script>
 </body>
 
