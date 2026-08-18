@@ -334,7 +334,7 @@
     }
 
     /* ── Toast ────────────────────────────────────────────── */
-    /* ── Painel de envio (projeto/ambiente na plataforma) ──── */
+    /* ── Painel de envio (projeto na plataforma) ─────────────── */
     .send-panel {
       border-top: 1px solid var(--border);
       margin-top: 12px;
@@ -350,8 +350,7 @@
       gap: 8px;
     }
 
-    .send-panel select,
-    .send-new-area-row input {
+    .send-panel select {
       flex: 1;
       border: 1px solid var(--border);
       border-radius: 5px;
@@ -363,19 +362,13 @@
       outline: none;
     }
 
-    .send-panel select:focus,
-    .send-new-area-row input:focus {
+    .send-panel select:focus {
       border-color: var(--ferrugem);
     }
 
     .send-panel select:disabled {
       color: var(--muted);
       background: var(--areia);
-    }
-
-    .send-new-area-row {
-      display: flex;
-      gap: 6px;
     }
 
     .send-panel-actions {
@@ -958,6 +951,7 @@
   <script src="library-ambientes.js"></script>
   <script src="library-import-export.js"></script>
   <script src="library-items.js"></script>
+  <script src="library-platform-send.js"></script>
   <script src="library.js"></script>
 </body>
 
