@@ -53,19 +53,19 @@ $('saveSettingsBtn').addEventListener('click', async () => {
   loadProjects();
 });
 
-// ─── IA (OpenRouter) ────────────────────────────────────────────────────
+// ─── IA (Gemini) ────────────────────────────────────────────────────────
 
 async function initAiSettingsForm() {
   const { apiKey, model } = await getAiSettings();
-  $('openrouterApiKey').value = apiKey;
-  $('openrouterModel').value = model;
+  $('geminiApiKey').value = apiKey;
+  $('geminiModel').value = model;
 }
 
 $('saveAiSettingsBtn').addEventListener('click', async () => {
-  const apiKey = $('openrouterApiKey').value.trim();
-  const model = $('openrouterModel').value.trim();
+  const apiKey = $('geminiApiKey').value.trim();
+  const model = $('geminiModel').value.trim();
   if (!apiKey) {
-    showAiSettingsStatus('⚠ Preencha a chave de API do OpenRouter antes de salvar.', 'warn');
+    showAiSettingsStatus('⚠ Preencha a chave de API do Gemini antes de salvar.', 'warn');
     return;
   }
   await saveAiSettings(apiKey, model);
