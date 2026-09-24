@@ -234,6 +234,15 @@
         <label for="geminiModel">Modelo</label>
         <input type="text" id="geminiModel" placeholder="gemini-2.5-flash" />
       </div>
+      <div class="field">
+        <label for="geminiRpm">Limite (requisições por minuto)</label>
+        <input type="number" id="geminiRpm" placeholder="15" min="1" step="1" />
+        <div class="card-sub" style="margin:4px 0 0">
+          Ainda vendo erro 429? A cota real do seu modelo pode ser menor que 15. Confira em
+          <strong>aistudio.google.com/app/apikey</strong> (ou na mensagem de erro) e diminua esse número —
+          a extensão passa a esperar mais entre as chamadas.
+        </div>
+      </div>
       <button class="btn btn-primary" id="saveAiSettingsBtn">Salvar chave da IA</button>
       <div class="status-bar" id="aiSettingsStatus"></div>
     </div>

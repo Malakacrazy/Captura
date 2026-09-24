@@ -9,21 +9,30 @@
 // Mesmo padrão de platform-sync.js nesta extensão: funções globais, sem
 // bundler nem módulos ES.
 
-const AI_SETTINGS_KEYS = ['geminiApiKey', 'geminiModel'];
+const AI_SETTINGS_KEYS = ['geminiApiKey', 'geminiModel', 'geminiRpm'];
 const AI_DEFAULT_MODEL = 'gemini-2.5-flash';
+// 15 é o teto mais comum do free tier, mas varia por modelo e por conta (o
+// Gemini 2.5 Pro, por exemplo, costuma vir bem mais restrito) -- por isso é
+// configurável em vez de fixo: se ainda vier 429, quem usa baixa esse número
+// para o que a própria página de cota do AI Studio mostrar para a chave dele.
+const AI_DEFAULT_RPM = 15;
 
 async function getAiSettings() {
   const data = await chrome.storage.local.get(AI_SETTINGS_KEYS);
+  const rpm = Math.floor(Number(data.geminiRpm));
   return {
     apiKey: (data.geminiApiKey || '').trim(),
-    model: (data.geminiModel || '').trim() || AI_DEFAULT_MODEL
+    model: (data.geminiModel || '').trim() || AI_DEFAULT_MODEL,
+    rpm: Number.isFinite(rpm) && rpm > 0 ? rpm : AI_DEFAULT_RPM
   };
 }
 
-async function saveAiSettings(apiKey, model) {
+async function saveAiSettings(apiKey, model, rpm) {
+  const n = Math.floor(Number(rpm));
   await chrome.storage.local.set({
     geminiApiKey: apiKey.trim(),
-    geminiModel: (model || '').trim() || AI_DEFAULT_MODEL
+    geminiModel: (model || '').trim() || AI_DEFAULT_MODEL,
+    geminiRpm: Number.isFinite(n) && n > 0 ? n : AI_DEFAULT_RPM
   });
 }
 
@@ -33,28 +42,41 @@ async function saveAiSettings(apiKey, model) {
 // categoria inexistente, que quebraria o agrupamento do PDF/Excel.
 const AI_BATCH_SIZE = 6; // produtos por chamada -- lote grande demais aumenta o risco do modelo truncar o JSON
 
-// O free tier do Gemini corta em 15 requisições por minuto -- cada chamada
-// a callGeminiBatch (um lote inteiro) conta como 1 requisição. Em vez de
-// deixar a API devolver 429 no 16º lote, seguramos a próxima chamada até
-// haver espaço na janela deslizante de 60s. Estado em módulo (não por
-// projeto) porque o limite é da CHAVE, não da sessão de enriquecimento --
-// duas rodadas seguidas no mesmo minuto precisam somar, não resetar.
-const AI_RATE_LIMIT_RPM = 15;
+// Cada chamada a callGeminiBatch (um lote inteiro) conta como 1 requisição
+// para a cota do Gemini. Em vez de deixar a API devolver 429 a partir da
+// requisição de nº "rpm + 1", seguramos a próxima chamada até haver espaço
+// na janela deslizante de 60s. Estado em módulo (não por projeto) porque o
+// limite é da CHAVE, não da sessão de enriquecimento -- duas rodadas
+// seguidas no mesmo minuto precisam somar, não resetar.
 const AI_RATE_LIMIT_WINDOW_MS = 60000;
 let aiRequestTimestamps = [];
 
-async function waitForRateLimit(onWait) {
+async function waitForRateLimit(rpm, onWait) {
   for (;;) {
     const now = Date.now();
     aiRequestTimestamps = aiRequestTimestamps.filter(t => now - t < AI_RATE_LIMIT_WINDOW_MS);
-    if (aiRequestTimestamps.length < AI_RATE_LIMIT_RPM) {
+    if (aiRequestTimestamps.length < rpm) {
       aiRequestTimestamps.push(now);
       return;
     }
     const waitMs = AI_RATE_LIMIT_WINDOW_MS - (now - aiRequestTimestamps[0]) + 50;
-    onWait?.(waitMs);
+    onWait?.(waitMs, 'pacing');
     await new Promise(resolve => setTimeout(resolve, waitMs));
   }
+}
+
+// A cota real por vezes é mais apertada do que "rpm" (TPM/RPD, ou um
+// modelo mais restrito que o configurado) e a API ainda assim devolve 429
+// -- nesse caso o corpo do erro costuma trazer quanto esperar em
+// error.details[].retryDelay (formato "19s", padrão google.rpc.RetryInfo).
+// Quando não vem, usamos um backoff cego crescente em vez de desistir na
+// primeira.
+function parseRetryDelayMs(errorBody) {
+  const details = errorBody?.error?.details;
+  if (!Array.isArray(details)) return null;
+  const info = details.find(d => typeof d?.retryDelay === 'string');
+  const match = info && /^(\d+(?:\.\d+)?)s$/.exec(info.retryDelay.trim());
+  return match ? Math.ceil(parseFloat(match[1]) * 1000) : null;
 }
 
 function aiProductPayload(p) {
@@ -120,36 +142,59 @@ function parseAiJsonArray(text) {
   return parsed;
 }
 
-async function callGeminiBatch(batch, apiKey, model, onWait) {
-  await waitForRateLimit(onWait);
+const AI_MAX_429_RETRIES = 4;
+const AI_DEFAULT_RETRY_MS = 20000; // usado só quando a API não informa retryDelay
+
+async function callGeminiBatch(batch, apiKey, model, rpm, onWait) {
   const prompt = buildAiPrompt(batch);
-  let res;
-  try {
-    res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          tools: [{ google_search: {} }],
-          generationConfig: { temperature: 0.1 }
-        })
+
+  for (let attempt = 1; attempt <= AI_MAX_429_RETRIES; attempt++) {
+    await waitForRateLimit(rpm, onWait);
+
+    let res;
+    try {
+      res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            tools: [{ google_search: {} }],
+            generationConfig: { temperature: 0.1 }
+          })
+        }
+      );
+    } catch (e) {
+      throw new Error(`Não foi possível conectar à API do Gemini (${e?.message || e}).`);
+    }
+
+    if (res.status === 429) {
+      const body = await res.json().catch(() => null);
+      if (attempt === AI_MAX_429_RETRIES) {
+        throw new Error(
+          body?.error?.message ||
+          'A API do Gemini limitou as requisições (HTTP 429) e as tentativas se esgotaram. Baixe o "Limite (RPM)" em ⚙ Configurações.'
+        );
       }
-    );
-  } catch (e) {
-    throw new Error(`Não foi possível conectar à API do Gemini (${e?.message || e}).`);
+      const retryMs = parseRetryDelayMs(body) ?? AI_DEFAULT_RETRY_MS * attempt;
+      onWait?.(retryMs, 'retry-429');
+      await new Promise(resolve => setTimeout(resolve, retryMs));
+      continue;
+    }
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      throw new Error(body?.error?.message || `A API do Gemini respondeu com erro (HTTP ${res.status}).`);
+    }
+
+    const body = await res.json();
+    if (body?.promptFeedback?.blockReason) {
+      throw new Error(`A IA bloqueou a resposta (${body.promptFeedback.blockReason}).`);
+    }
+    const text = (body?.candidates?.[0]?.content?.parts || []).map(p => p.text || '').join('');
+    return parseAiJsonArray(text);
   }
-  if (!res.ok) {
-    const body = await res.json().catch(() => null);
-    throw new Error(body?.error?.message || `A API do Gemini respondeu com erro (HTTP ${res.status}).`);
-  }
-  const body = await res.json();
-  if (body?.promptFeedback?.blockReason) {
-    throw new Error(`A IA bloqueou a resposta (${body.promptFeedback.blockReason}).`);
-  }
-  const text = (body?.candidates?.[0]?.content?.parts || []).map(p => p.text || '').join('');
-  return parseAiJsonArray(text);
 }
 
 // Compara o produto atual (p) com a sugestão da IA (s, já no formato
@@ -200,12 +245,13 @@ function diffAiSuggestion(p, s) {
 
 // Roda a IA sobre a lista de produtos em lotes de AI_BATCH_SIZE, chamando
 // onProgress(feitos, total, status?) a cada lote concluído -- "status" só
-// vem preenchido enquanto a chamada está parada esperando o limite de
-// AI_RATE_LIMIT_RPM liberar. Um lote que falha (erro de rede, JSON
-// inválido etc.) não derruba os outros -- cada produto do lote falho entra
-// no resultado com "error" preenchido em vez de "changes".
+// vem preenchido enquanto a chamada está parada esperando (seja o próprio
+// limite configurado, seja um 429 real). Um lote que falha (erro de rede,
+// JSON inválido, 429 esgotando as tentativas etc.) não derruba os outros --
+// cada produto do lote falho entra no resultado com "error" preenchido em
+// vez de "changes".
 async function enrichProjectWithAI(products, onProgress) {
-  const { apiKey, model } = await getAiSettings();
+  const { apiKey, model, rpm } = await getAiSettings();
   if (!apiKey) {
     throw new Error('Configure a chave de API do Gemini em ⚙ Configurações antes de usar a IA.');
   }
@@ -219,8 +265,11 @@ async function enrichProjectWithAI(products, onProgress) {
     let suggestions = null;
     let batchError = null;
     try {
-      suggestions = await callGeminiBatch(batch, apiKey, model, (waitMs) => {
-        onProgress?.(done, products.length, `Aguardando limite de ${AI_RATE_LIMIT_RPM} req/min… (${Math.ceil(waitMs / 1000)}s)`);
+      suggestions = await callGeminiBatch(batch, apiKey, model, rpm, (waitMs, reason) => {
+        const msg = reason === 'retry-429'
+          ? `A IA respondeu 429 (limite excedido) — tentando de novo em ${Math.ceil(waitMs / 1000)}s…`
+          : `Aguardando limite de ${rpm} req/min… (${Math.ceil(waitMs / 1000)}s)`;
+        onProgress?.(done, products.length, msg);
       });
     } catch (e) {
       batchError = e.message || String(e);

@@ -56,19 +56,21 @@ $('saveSettingsBtn').addEventListener('click', async () => {
 // ─── IA (Gemini) ────────────────────────────────────────────────────────
 
 async function initAiSettingsForm() {
-  const { apiKey, model } = await getAiSettings();
+  const { apiKey, model, rpm } = await getAiSettings();
   $('geminiApiKey').value = apiKey;
   $('geminiModel').value = model;
+  $('geminiRpm').value = rpm;
 }
 
 $('saveAiSettingsBtn').addEventListener('click', async () => {
   const apiKey = $('geminiApiKey').value.trim();
   const model = $('geminiModel').value.trim();
+  const rpm = $('geminiRpm').value.trim();
   if (!apiKey) {
     showAiSettingsStatus('⚠ Preencha a chave de API do Gemini antes de salvar.', 'warn');
     return;
   }
-  await saveAiSettings(apiKey, model);
+  await saveAiSettings(apiKey, model, rpm);
   showAiSettingsStatus('✓ Chave da IA salva.', 'ok');
 });
 
