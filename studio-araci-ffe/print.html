@@ -344,12 +344,12 @@
     }
 
     /* Table */
-    /* 6 colunas: imagem | Produto | Ambiente | Observações | Qtd | Subtotal.
+    /* 7 colunas: imagem | Produto | Origem | Ambiente | Observações | Qtd | Subtotal.
      * O custo unitário fica só no Excel — no PDF ele apertava demais as colunas.
      * grid-template-columns aqui e em .table-row precisam ser idênticos. */
     .table-header {
       display: grid;
-      grid-template-columns: 52px 1fr 90px 90px 50px 90px;
+      grid-template-columns: 52px 1fr 46px 90px 90px 50px 90px;
       gap: 10px;
       padding: 8px 12px;
       background: var(--grafite);
@@ -365,7 +365,7 @@
 
     .table-row {
       display: grid;
-      grid-template-columns: 52px 1fr 90px 90px 50px 90px;
+      grid-template-columns: 52px 1fr 46px 90px 90px 50px 90px;
       gap: 10px;
       padding: 10px 12px;
       border-bottom: 1px solid var(--areia);
@@ -414,6 +414,20 @@
     .prod-meta-print a {
       color: var(--ferrugem);
       text-decoration: none;
+    }
+
+    .col-origin {
+      text-align: center;
+      font-size: 15px;
+    }
+
+    .col-origin a {
+      color: var(--ferrugem);
+      text-decoration: none;
+    }
+
+    .col-origin .no-origin {
+      color: var(--duna);
     }
 
     .col-center {

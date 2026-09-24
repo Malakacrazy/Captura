@@ -130,7 +130,7 @@ async function render() {
     const tableHeader = document.createElement('div');
     tableHeader.className = 'table-header';
     tableHeader.innerHTML =
-      '<div></div><div>Produto</div><div>Ambiente</div><div>Observações</div>' +
+      '<div></div><div>Produto</div><div style="text-align:center">Origem</div><div>Ambiente</div><div>Observações</div>' +
       '<div style="text-align:center">Qtd</div>' +
       '<div style="text-align:right">Subtotal</div>';
 
@@ -199,6 +199,23 @@ function buildProductRow(p, idx) {
 
   infoCell.append(nameEl, metaEl);
 
+  const originCell = document.createElement('div');
+  originCell.className = 'col-origin';
+  if (p.url) {
+    const link = document.createElement('a');
+    link.href = p.url;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    link.textContent = '🔗';
+    link.title = p.url;
+    originCell.appendChild(link);
+  } else {
+    const dash = document.createElement('span');
+    dash.className = 'no-origin';
+    dash.textContent = '—';
+    originCell.appendChild(dash);
+  }
+
   const qtyCell = document.createElement('div');
   qtyCell.className = 'col-center';
   qtyCell.textContent = (p.qty || 1) + (p.unit ? ' ' + p.unit : '');
@@ -217,6 +234,6 @@ function buildProductRow(p, idx) {
   totalCell.className = 'col-total';
   totalCell.textContent = fmt((p.price || 0) * (p.qty || 1));
 
-  row.append(imgCell, infoCell, ambCell, obsCell, qtyCell, totalCell);
+  row.append(imgCell, infoCell, originCell, ambCell, obsCell, qtyCell, totalCell);
   return row;
 }
