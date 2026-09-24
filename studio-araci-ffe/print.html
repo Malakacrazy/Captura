@@ -372,6 +372,12 @@
       align-items: center;
     }
 
+    /* Sem observações em nenhum produto — coluna Obs. encolhe */
+    #sections.no-obs .table-header,
+    #sections.no-obs .table-row {
+      grid-template-columns: 52px 1fr 46px 90px 30px 50px 90px;
+    }
+
     .table-row:nth-child(even) {
       background: var(--bg);
     }

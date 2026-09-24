@@ -85,6 +85,7 @@ async function render() {
 
   const sections = document.getElementById('sections');
   sections.innerHTML = '';
+  sections.classList.toggle('no-obs', !products.some(p => (p.obs || '').trim() !== ''));
 
   if (products.length === 0) {
     const empty = document.createElement('div');
@@ -130,7 +131,7 @@ async function render() {
     const tableHeader = document.createElement('div');
     tableHeader.className = 'table-header';
     tableHeader.innerHTML =
-      '<div></div><div>Produto</div><div style="text-align:center">Origem</div><div>Ambiente</div><div>Observações</div>' +
+      '<div></div><div>Produto</div><div style="text-align:center">Origem</div><div>Ambiente</div><div>Obs.</div>' +
       '<div style="text-align:center">Qtd</div>' +
       '<div style="text-align:right">Subtotal</div>';
 
