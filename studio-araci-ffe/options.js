@@ -26,6 +26,15 @@ function showSendStatus(msg, type) {
   sendStatusTimer = setTimeout(() => { el.className = 'status-bar'; }, 8000);
 }
 
+let aiSettingsStatusTimer;
+function showAiSettingsStatus(msg, type) {
+  const el = $('aiSettingsStatus');
+  el.textContent = msg;
+  el.className = 'status-bar ' + type;
+  clearTimeout(aiSettingsStatusTimer);
+  aiSettingsStatusTimer = setTimeout(() => { el.className = 'status-bar'; }, 4000);
+}
+
 async function initSettingsForm() {
   const { apiUrl, apiKey } = await getPlatformSettings();
   $('apiUrl').value = apiUrl;
@@ -42,6 +51,25 @@ $('saveSettingsBtn').addEventListener('click', async () => {
   await savePlatformSettings(apiUrl, apiKey);
   showSettingsStatus('✓ Configurações salvas.', 'ok');
   loadProjects();
+});
+
+// ─── IA (Gemini) ────────────────────────────────────────────────────────
+
+async function initAiSettingsForm() {
+  const { apiKey, model } = await getAiSettings();
+  $('geminiApiKey').value = apiKey;
+  $('geminiModel').value = model;
+}
+
+$('saveAiSettingsBtn').addEventListener('click', async () => {
+  const apiKey = $('geminiApiKey').value.trim();
+  const model = $('geminiModel').value.trim();
+  if (!apiKey) {
+    showAiSettingsStatus('⚠ Preencha a chave de API do Gemini antes de salvar.', 'warn');
+    return;
+  }
+  await saveAiSettings(apiKey, model);
+  showAiSettingsStatus('✓ Chave da IA salva.', 'ok');
 });
 
 // ─── Projeto ──────────────────────────────────────────────────────────────
@@ -119,5 +147,6 @@ $('sendBtn').addEventListener('click', async () => {
 });
 
 initSettingsForm();
+initAiSettingsForm();
 loadProjects();
 refreshSendReadiness();

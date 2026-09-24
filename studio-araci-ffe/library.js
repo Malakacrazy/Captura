@@ -151,7 +151,29 @@ function buildCard(proj) {
     cardWrap.appendChild(sendPanel);
   });
 
-  actions.append(expandBtn, pdfBtn, xlsxBtn, shareBtn, sendBtn, loadBtn, delBtn);
+  // Painel de enriquecimento por IA (buildAiPanel, em library-ai-enrich.js).
+  // Mesmo toggle de sendBtn/expandBtn: primeiro clique abre, segundo fecha.
+  const aiBtn = document.createElement('button');
+  aiBtn.className = 'act-btn';
+  aiBtn.textContent = '🤖 IA';
+  aiBtn.title = `Pesquisar e sugerir correções para os produtos de "${proj.name}"`;
+
+  let aiPanel = null;
+  aiBtn.addEventListener('click', () => {
+    if (aiPanel) {
+      aiPanel.remove();
+      aiPanel = null;
+      return;
+    }
+    if ((proj.products || []).length === 0) {
+      showToast('⚠ Este projeto não tem itens.');
+      return;
+    }
+    aiPanel = buildAiPanel(proj, refreshCard, () => { aiPanel.remove(); aiPanel = null; });
+    cardWrap.appendChild(aiPanel);
+  });
+
+  actions.append(expandBtn, pdfBtn, xlsxBtn, shareBtn, sendBtn, aiBtn, loadBtn, delBtn);
 
   const cardWrap = document.createElement('div');
   cardWrap.style.cssText = 'margin-bottom:10px';
