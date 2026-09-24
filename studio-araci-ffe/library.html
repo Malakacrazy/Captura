@@ -391,123 +391,6 @@
       color: #166534;
     }
 
-    /* ── Painel de IA (enriquecer/corrigir produtos) ─────────── */
-    .ai-panel {
-      border-top: 1px solid var(--border);
-      margin-top: 12px;
-      padding-top: 10px;
-      width: 100%;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-    }
-
-    .ai-intro {
-      font-size: 11.5px;
-      color: var(--muted);
-      line-height: 1.6;
-    }
-
-    .ai-progress {
-      font-size: 12px;
-      color: var(--muted);
-    }
-
-    .ai-results {
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-    }
-
-    .ai-summary {
-      font-size: 11.5px;
-      color: var(--muted);
-    }
-
-    .ai-diff-list {
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      max-height: 440px;
-      overflow-y: auto;
-      padding-right: 4px;
-    }
-
-    .ai-diff-card {
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      padding: 10px 12px;
-    }
-
-    .ai-diff-card-header {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin-bottom: 6px;
-    }
-
-    .ai-diff-thumb {
-      width: 28px;
-      height: 28px;
-      object-fit: contain;
-      border-radius: 3px;
-      background: var(--areia);
-      flex-shrink: 0;
-    }
-
-    .ai-diff-name {
-      font-size: 12.5px;
-      font-weight: 600;
-      color: var(--text);
-    }
-
-    .ai-diff-row {
-      display: grid;
-      grid-template-columns: 18px 90px 1fr 14px 1fr;
-      gap: 8px;
-      align-items: center;
-      padding: 4px 0;
-      font-size: 11.5px;
-    }
-
-    .ai-diff-label {
-      font-weight: 600;
-      color: var(--muted);
-    }
-
-    .ai-diff-old {
-      color: #dc2626;
-      text-decoration: line-through;
-      overflow-wrap: anywhere;
-    }
-
-    .ai-diff-arrow {
-      color: var(--muted);
-      text-align: center;
-    }
-
-    .ai-diff-new {
-      color: #166534;
-      font-weight: 600;
-      overflow-wrap: anywhere;
-    }
-
-    .ai-diff-error {
-      font-size: 11.5px;
-      color: #9a3412;
-    }
-
-    .ai-toggle-all {
-      display: flex;
-      gap: 8px;
-    }
-
-    .ai-diff-footer {
-      display: flex;
-      justify-content: flex-end;
-      gap: 8px;
-    }
-
     /* ── Items table ──────────────────────────────────────── */
     .items-panel {
       border-top: 1px solid var(--border);
@@ -1064,13 +947,11 @@
 
   <script src="categories.js"></script>
   <script src="platform-sync.js"></script>
-  <script src="ai-enrich.js"></script>
   <script src="library-utils.js"></script>
   <script src="library-ambientes.js"></script>
   <script src="library-import-export.js"></script>
   <script src="library-items.js"></script>
   <script src="library-platform-send.js"></script>
-  <script src="library-ai-enrich.js"></script>
   <script src="library.js"></script>
 </body>
 

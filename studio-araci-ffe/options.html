@@ -219,35 +219,6 @@
     </div>
 
     <div class="card">
-      <div class="card-title">IA (Gemini)</div>
-      <div class="card-sub">
-        Usada pelo botão <strong>🤖 IA</strong> na Biblioteca de Projetos para pesquisar e sugerir correções
-        nos produtos de um projeto salvo. Gere uma chave gratuita em
-        <strong>aistudio.google.com/apikey</strong> e cole aqui — nada é enviado à IA sem você clicar em
-        "🤖 IA" naquela tela.
-      </div>
-      <div class="field">
-        <label for="geminiApiKey">Chave de API do Gemini</label>
-        <input type="password" id="geminiApiKey" placeholder="AIza..." autocomplete="off" />
-      </div>
-      <div class="field">
-        <label for="geminiModel">Modelo</label>
-        <input type="text" id="geminiModel" placeholder="gemini-2.5-flash" />
-      </div>
-      <div class="field">
-        <label for="geminiRpm">Limite (requisições por minuto)</label>
-        <input type="number" id="geminiRpm" placeholder="15" min="1" step="1" />
-        <div class="card-sub" style="margin:4px 0 0">
-          Ainda vendo erro 429? A cota real do seu modelo pode ser menor que 15. Confira em
-          <strong>aistudio.google.com/app/apikey</strong> (ou na mensagem de erro) e diminua esse número —
-          a extensão passa a esperar mais entre as chamadas.
-        </div>
-      </div>
-      <button class="btn btn-primary" id="saveAiSettingsBtn">Salvar chave da IA</button>
-      <div class="status-bar" id="aiSettingsStatus"></div>
-    </div>
-
-    <div class="card">
       <div class="card-title">Orçamento atual</div>
       <div class="card-sub">
         Envia os itens do orçamento em andamento (o mesmo que aparece no popup da extensão) para o projeto
@@ -274,8 +245,6 @@
 
   <!-- platform-sync.js define getPlatformSettings/savePlatformSettings/sendProductsToPlatform -->
   <script src="platform-sync.js"></script>
-  <!-- ai-enrich.js define getAiSettings/saveAiSettings (chave do Gemini) -->
-  <script src="ai-enrich.js"></script>
   <script src="options.js"></script>
 </body>
 
