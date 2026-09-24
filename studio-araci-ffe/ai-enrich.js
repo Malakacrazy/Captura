@@ -33,6 +33,30 @@ async function saveAiSettings(apiKey, model) {
 // categoria inexistente, que quebraria o agrupamento do PDF/Excel.
 const AI_BATCH_SIZE = 6; // produtos por chamada -- lote grande demais aumenta o risco do modelo truncar o JSON
 
+// O free tier do Gemini corta em 15 requisições por minuto -- cada chamada
+// a callGeminiBatch (um lote inteiro) conta como 1 requisição. Em vez de
+// deixar a API devolver 429 no 16º lote, seguramos a próxima chamada até
+// haver espaço na janela deslizante de 60s. Estado em módulo (não por
+// projeto) porque o limite é da CHAVE, não da sessão de enriquecimento --
+// duas rodadas seguidas no mesmo minuto precisam somar, não resetar.
+const AI_RATE_LIMIT_RPM = 15;
+const AI_RATE_LIMIT_WINDOW_MS = 60000;
+let aiRequestTimestamps = [];
+
+async function waitForRateLimit(onWait) {
+  for (;;) {
+    const now = Date.now();
+    aiRequestTimestamps = aiRequestTimestamps.filter(t => now - t < AI_RATE_LIMIT_WINDOW_MS);
+    if (aiRequestTimestamps.length < AI_RATE_LIMIT_RPM) {
+      aiRequestTimestamps.push(now);
+      return;
+    }
+    const waitMs = AI_RATE_LIMIT_WINDOW_MS - (now - aiRequestTimestamps[0]) + 50;
+    onWait?.(waitMs);
+    await new Promise(resolve => setTimeout(resolve, waitMs));
+  }
+}
+
 function aiProductPayload(p) {
   return {
     id: p.id,
@@ -96,7 +120,8 @@ function parseAiJsonArray(text) {
   return parsed;
 }
 
-async function callGeminiBatch(batch, apiKey, model) {
+async function callGeminiBatch(batch, apiKey, model, onWait) {
+  await waitForRateLimit(onWait);
   const prompt = buildAiPrompt(batch);
   let res;
   try {
@@ -174,9 +199,11 @@ function diffAiSuggestion(p, s) {
 }
 
 // Roda a IA sobre a lista de produtos em lotes de AI_BATCH_SIZE, chamando
-// onProgress(feitos, total) a cada lote concluído. Um lote que falha (erro de
-// rede, JSON inválido etc.) não derruba os outros -- cada produto do lote
-// falho entra no resultado com "error" preenchido em vez de "changes".
+// onProgress(feitos, total, status?) a cada lote concluído -- "status" só
+// vem preenchido enquanto a chamada está parada esperando o limite de
+// AI_RATE_LIMIT_RPM liberar. Um lote que falha (erro de rede, JSON
+// inválido etc.) não derruba os outros -- cada produto do lote falho entra
+// no resultado com "error" preenchido em vez de "changes".
 async function enrichProjectWithAI(products, onProgress) {
   const { apiKey, model } = await getAiSettings();
   if (!apiKey) {
@@ -192,7 +219,9 @@ async function enrichProjectWithAI(products, onProgress) {
     let suggestions = null;
     let batchError = null;
     try {
-      suggestions = await callGeminiBatch(batch, apiKey, model);
+      suggestions = await callGeminiBatch(batch, apiKey, model, (waitMs) => {
+        onProgress?.(done, products.length, `Aguardando limite de ${AI_RATE_LIMIT_RPM} req/min… (${Math.ceil(waitMs / 1000)}s)`);
+      });
     } catch (e) {
       batchError = e.message || String(e);
     }

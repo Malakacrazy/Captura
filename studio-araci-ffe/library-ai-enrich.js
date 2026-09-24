@@ -237,8 +237,8 @@ function buildAiPanel(proj, refreshCard, onClose) {
 
     let results;
     try {
-      results = await enrichProjectWithAI(items, (done, total) => {
-        progress.textContent = `Analisando ${done}/${total}…`;
+      results = await enrichProjectWithAI(items, (done, total, status) => {
+        progress.textContent = status || `Analisando ${done}/${total}…`;
       });
     } catch (e) {
       body.innerHTML = '';
