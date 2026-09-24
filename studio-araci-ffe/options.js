@@ -53,19 +53,19 @@ $('saveSettingsBtn').addEventListener('click', async () => {
   loadProjects();
 });
 
-// ─── IA (Gemini) ────────────────────────────────────────────────────────
+// ─── IA (Claude) ────────────────────────────────────────────────────────
 
 async function initAiSettingsForm() {
   const { apiKey, model } = await getAiSettings();
-  $('geminiApiKey').value = apiKey;
-  $('geminiModel').value = model;
+  $('claudeApiKey').value = apiKey;
+  $('claudeModel').value = model;
 }
 
 $('saveAiSettingsBtn').addEventListener('click', async () => {
-  const apiKey = $('geminiApiKey').value.trim();
-  const model = $('geminiModel').value.trim();
+  const apiKey = $('claudeApiKey').value.trim();
+  const model = $('claudeModel').value.trim();
   if (!apiKey) {
-    showAiSettingsStatus('⚠ Preencha a chave de API do Gemini antes de salvar.', 'warn');
+    showAiSettingsStatus('⚠ Preencha a chave de API do Claude antes de salvar.', 'warn');
     return;
   }
   await saveAiSettings(apiKey, model);

@@ -1,29 +1,31 @@
-// ai-enrich.js — Studio Araci FF&E · Enriquecimento de produtos via Gemini
+// ai-enrich.js — Studio Araci FF&E · Enriquecimento de produtos via Claude
 //
-// Núcleo de acesso à API do Gemini (Google AI Studio): guarda a chave de
-// API, monta o prompt em lote e compara a sugestão da IA com o produto
-// atual campo a campo. Quem decide o que fazer com o resultado (mostrar
-// diffs, aceitar/descartar) é library-ai-enrich.js — este arquivo só sabe
+// Núcleo de acesso à API do Claude (Anthropic): guarda a chave de API,
+// monta o prompt em lote e compara a sugestão da IA com o produto atual
+// campo a campo. Quem decide o que fazer com o resultado (mostrar diffs,
+// aceitar/descartar) é library-ai-enrich.js — este arquivo só sabe
 // conversar com a API e comparar dados, por isso pode ser carregado tanto
 // em options.html (só a chave) quanto em library.html (chave + uso real).
 // Mesmo padrão de platform-sync.js nesta extensão: funções globais, sem
-// bundler nem módulos ES.
+// bundler nem módulos ES -- e é exatamente por não termos bundler que a
+// chamada é feita com fetch() direto em vez do SDK oficial da Anthropic
+// (que precisaria de um bundler para rodar aqui).
 
-const AI_SETTINGS_KEYS = ['geminiApiKey', 'geminiModel'];
-const AI_DEFAULT_MODEL = 'gemini-2.5-flash';
+const AI_SETTINGS_KEYS = ['claudeApiKey', 'claudeModel'];
+const AI_DEFAULT_MODEL = 'claude-opus-5';
 
 async function getAiSettings() {
   const data = await chrome.storage.local.get(AI_SETTINGS_KEYS);
   return {
-    apiKey: (data.geminiApiKey || '').trim(),
-    model: (data.geminiModel || '').trim() || AI_DEFAULT_MODEL
+    apiKey: (data.claudeApiKey || '').trim(),
+    model: (data.claudeModel || '').trim() || AI_DEFAULT_MODEL
   };
 }
 
 async function saveAiSettings(apiKey, model) {
   await chrome.storage.local.set({
-    geminiApiKey: apiKey.trim(),
-    geminiModel: (model || '').trim() || AI_DEFAULT_MODEL
+    claudeApiKey: apiKey.trim(),
+    claudeModel: (model || '').trim() || AI_DEFAULT_MODEL
   });
 }
 
@@ -47,30 +49,30 @@ function aiProductPayload(p) {
   };
 }
 
-function buildAiPrompt(batch) {
-  const categorias = (typeof STUDIO_ARACI_CATEGORIES !== 'undefined' ? STUDIO_ARACI_CATEGORIES : [])
-    .map(c => `"${c.id}" (${c.label})`).join(', ');
+const AI_SYSTEM_PROMPT = `Você é um assistente de pesquisa para um escritório de arquitetura de interiores especificando produtos de FF&E (revestimentos, louças, metais, iluminação, eletros, móveis, decoração).
 
-  return `Você é um assistente de pesquisa para um escritório de arquitetura de interiores especificando produtos de FF&E (revestimentos, louças, metais, iluminação, eletros, móveis, decoração).
+Para cada produto que o usuário enviar, use a busca na web para localizar a página do produto (o campo "url_origem", quando presente, é a melhor pista; senão busque por nome/marca/sku) e confira/complete os dados.
 
-Para cada produto da lista JSON abaixo, use a busca do Google para localizar a página do produto (o campo "url_origem", quando presente, é a melhor pista; senão busque por nome/marca/sku) e confira/complete os dados.
-
-Categorias válidas para o campo "categoria": ${categorias}.
-
-Para CADA produto da lista, devolva um objeto com exatamente estas chaves:
+Para CADA produto recebido, devolva um objeto com exatamente estas chaves:
 - "id": o mesmo id recebido
 - "nome": nome completo e correto do produto (marca + modelo/linha, sem termos de marketing)
 - "marca": fabricante
 - "sku": código/referência do fabricante, se encontrar
 - "dimensoes": dimensões físicas (ex: "60x60cm", "1,20 x 0,80 x 0,75m")
 - "preco": preço atual em reais encontrado na página de origem, só número (sem "R$", sem separador de milhar)
-- "categoria": um dos ids válidos listados acima
+- "categoria": um dos ids de categoria válidos informados pelo usuário
 - "observacoes": informação útil para a especificação (material, cor, voltagem, garantia) em até 1 frase curta
 - "confianca": "alta", "media" ou "baixa"
 
 Regras importantes:
 - Quando não tiver certeza ou não encontrar nada melhor que o valor atual, repita exatamente o "*_atual" recebido para aquele campo -- nunca invente um valor.
-- Responda APENAS com um array JSON válido contendo um objeto por produto recebido, na mesma ordem, sem texto antes ou depois, sem markdown.
+- Responda APENAS com um array JSON válido contendo um objeto por produto recebido, na mesma ordem, sem texto antes ou depois, sem markdown.`;
+
+function buildAiUserMessage(batch) {
+  const categorias = (typeof STUDIO_ARACI_CATEGORIES !== 'undefined' ? STUDIO_ARACI_CATEGORIES : [])
+    .map(c => `"${c.id}" (${c.label})`).join(', ');
+
+  return `Categorias válidas para o campo "categoria": ${categorias}.
 
 Produtos:
 ${JSON.stringify(batch.map(aiProductPayload))}`;
@@ -96,39 +98,57 @@ function parseAiJsonArray(text) {
   return parsed;
 }
 
-async function callGeminiBatch(batch, apiKey, model) {
-  const prompt = buildAiPrompt(batch);
+// A API da Anthropic bloqueia por padrão chamadas feitas direto do
+// navegador (CORS) -- confirmado batendo na API real: sem o header abaixo o
+// preflight nem lista "access-control-allow-origin" na resposta, e o fetch()
+// quebra antes do JS conseguir ler o corpo, mesmo a chamada tendo sido
+// processada no servidor. Como esta extensão não tem backend (é só
+// chrome.storage.local + fetch, igual ao resto do arquivo), a chave do
+// usuário fica no navegador dele mesmo -- mesma decisão já tomada para a
+// chave da plataforma e, antes, a do Gemini.
+async function callClaudeBatch(batch, apiKey, model) {
   let res;
   try {
-    res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          tools: [{ google_search: {} }],
-          generationConfig: { temperature: 0.1 }
-        })
-      }
-    );
+    res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+        // fallbacks:"default" (abaixo) exige este beta -- reencaminha a
+        // chamada para outro modelo, do lado do servidor, se os
+        // classificadores de segurança do Claude Opus 5 recusarem o pedido.
+        'anthropic-beta': 'server-side-fallback-2026-07-01'
+      },
+      body: JSON.stringify({
+        model,
+        max_tokens: 16000,
+        output_config: { effort: 'medium' },
+        system: AI_SYSTEM_PROMPT,
+        messages: [{ role: 'user', content: buildAiUserMessage(batch) }],
+        tools: [{ type: 'web_search_20260209', name: 'web_search', max_uses: 15 }],
+        fallbacks: 'default'
+      })
+    });
   } catch (e) {
-    throw new Error(`Não foi possível conectar à API do Gemini (${e?.message || e}).`);
+    throw new Error(`Não foi possível conectar à API do Claude (${e?.message || e}).`);
   }
   if (!res.ok) {
     const body = await res.json().catch(() => null);
-    throw new Error(body?.error?.message || `A API do Gemini respondeu com erro (HTTP ${res.status}).`);
+    throw new Error(body?.error?.message || `A API do Claude respondeu com erro (HTTP ${res.status}).`);
   }
   const body = await res.json();
-  if (body?.promptFeedback?.blockReason) {
-    throw new Error(`A IA bloqueou a resposta (${body.promptFeedback.blockReason}).`);
+  if (body.stop_reason === 'refusal') {
+    const category = body.stop_details?.category ? ` (${body.stop_details.category})` : '';
+    throw new Error(`A IA recusou este lote${category}. Tente novamente ou reduza o tamanho do lote.`);
   }
-  const text = (body?.candidates?.[0]?.content?.parts || []).map(p => p.text || '').join('');
+  const text = (body.content || []).filter(b => b.type === 'text').map(b => b.text || '').join('');
   return parseAiJsonArray(text);
 }
 
 // Compara o produto atual (p) com a sugestão da IA (s, já no formato
-// devolvido por callGeminiBatch) e retorna só os campos que de fato mudaram.
+// devolvido por callClaudeBatch) e retorna só os campos que de fato mudaram.
 // "newValue" é o que de fato será gravado em p[key] se o usuário aceitar --
 // para "price" já é number, para "category" já é o id (não o rótulo).
 function diffAiSuggestion(p, s) {
@@ -180,7 +200,7 @@ function diffAiSuggestion(p, s) {
 async function enrichProjectWithAI(products, onProgress) {
   const { apiKey, model } = await getAiSettings();
   if (!apiKey) {
-    throw new Error('Configure a chave de API do Gemini em ⚙ Configurações antes de usar a IA.');
+    throw new Error('Configure a chave de API do Claude em ⚙ Configurações antes de usar a IA.');
   }
   if (!products || products.length === 0) return [];
 
@@ -192,7 +212,7 @@ async function enrichProjectWithAI(products, onProgress) {
     let suggestions = null;
     let batchError = null;
     try {
-      suggestions = await callGeminiBatch(batch, apiKey, model);
+      suggestions = await callClaudeBatch(batch, apiKey, model);
     } catch (e) {
       batchError = e.message || String(e);
     }
