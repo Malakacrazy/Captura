@@ -53,19 +53,19 @@ $('saveSettingsBtn').addEventListener('click', async () => {
   loadProjects();
 });
 
-// ─── IA (Claude) ────────────────────────────────────────────────────────
+// ─── IA (OpenRouter) ────────────────────────────────────────────────────
 
 async function initAiSettingsForm() {
   const { apiKey, model } = await getAiSettings();
-  $('claudeApiKey').value = apiKey;
-  $('claudeModel').value = model;
+  $('openrouterApiKey').value = apiKey;
+  $('openrouterModel').value = model;
 }
 
 $('saveAiSettingsBtn').addEventListener('click', async () => {
-  const apiKey = $('claudeApiKey').value.trim();
-  const model = $('claudeModel').value.trim();
+  const apiKey = $('openrouterApiKey').value.trim();
+  const model = $('openrouterModel').value.trim();
   if (!apiKey) {
-    showAiSettingsStatus('⚠ Preencha a chave de API do Claude antes de salvar.', 'warn');
+    showAiSettingsStatus('⚠ Preencha a chave de API do OpenRouter antes de salvar.', 'warn');
     return;
   }
   await saveAiSettings(apiKey, model);

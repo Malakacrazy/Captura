@@ -1,31 +1,35 @@
-// ai-enrich.js — Studio Araci FF&E · Enriquecimento de produtos via Claude
+// ai-enrich.js — Studio Araci FF&E · Enriquecimento de produtos via OpenRouter
 //
-// Núcleo de acesso à API do Claude (Anthropic): guarda a chave de API,
-// monta o prompt em lote e compara a sugestão da IA com o produto atual
-// campo a campo. Quem decide o que fazer com o resultado (mostrar diffs,
+// Núcleo de acesso à API do OpenRouter (proxy para Claude, GPT, Gemini,
+// Llama etc. atrás de uma única chave e um formato de chamada compatível
+// com a Chat Completions da OpenAI): guarda a chave de API, monta o
+// prompt em lote e compara a sugestão da IA com o produto atual campo a
+// campo. Quem decide o que fazer com o resultado (mostrar diffs,
 // aceitar/descartar) é library-ai-enrich.js — este arquivo só sabe
 // conversar com a API e comparar dados, por isso pode ser carregado tanto
 // em options.html (só a chave) quanto em library.html (chave + uso real).
 // Mesmo padrão de platform-sync.js nesta extensão: funções globais, sem
-// bundler nem módulos ES -- e é exatamente por não termos bundler que a
-// chamada é feita com fetch() direto em vez do SDK oficial da Anthropic
-// (que precisaria de um bundler para rodar aqui).
+// bundler nem módulos ES -- fetch() direto, sem SDK.
+//
+// O modelo é configurável (qualquer slug do catálogo do OpenRouter, ex.
+// "openai/gpt-5", "google/gemini-3-pro") porque é essa a vantagem de
+// passar pelo OpenRouter em vez de bater direto na API de um provedor só.
 
-const AI_SETTINGS_KEYS = ['claudeApiKey', 'claudeModel'];
-const AI_DEFAULT_MODEL = 'claude-opus-5';
+const AI_SETTINGS_KEYS = ['openrouterApiKey', 'openrouterModel'];
+const AI_DEFAULT_MODEL = 'anthropic/claude-opus-5';
 
 async function getAiSettings() {
   const data = await chrome.storage.local.get(AI_SETTINGS_KEYS);
   return {
-    apiKey: (data.claudeApiKey || '').trim(),
-    model: (data.claudeModel || '').trim() || AI_DEFAULT_MODEL
+    apiKey: (data.openrouterApiKey || '').trim(),
+    model: (data.openrouterModel || '').trim() || AI_DEFAULT_MODEL
   };
 }
 
 async function saveAiSettings(apiKey, model) {
   await chrome.storage.local.set({
-    claudeApiKey: apiKey.trim(),
-    claudeModel: (model || '').trim() || AI_DEFAULT_MODEL
+    openrouterApiKey: apiKey.trim(),
+    openrouterModel: (model || '').trim() || AI_DEFAULT_MODEL
   });
 }
 
@@ -98,57 +102,47 @@ function parseAiJsonArray(text) {
   return parsed;
 }
 
-// A API da Anthropic bloqueia por padrão chamadas feitas direto do
-// navegador (CORS) -- confirmado batendo na API real: sem o header abaixo o
-// preflight nem lista "access-control-allow-origin" na resposta, e o fetch()
-// quebra antes do JS conseguir ler o corpo, mesmo a chamada tendo sido
-// processada no servidor. Como esta extensão não tem backend (é só
-// chrome.storage.local + fetch, igual ao resto do arquivo), a chave do
-// usuário fica no navegador dele mesmo -- mesma decisão já tomada para a
-// chave da plataforma e, antes, a do Gemini.
-async function callClaudeBatch(batch, apiKey, model) {
+// Diferente da API da Anthropic direto, o OpenRouter é feito para ser
+// chamado do navegador (é a proposta dele -- uma chave, formato só de
+// Chat Completions, sem exigir SDK nem header especial de CORS). "plugins:
+// [{id:'web'}]" liga a busca na web do próprio OpenRouter (usa Exa por
+// baixo) para o modelo poder checar a página de origem do produto antes
+// de responder.
+async function callOpenRouterBatch(batch, apiKey, model) {
   let res;
   try {
-    res = await fetch('https://api.anthropic.com/v1/messages', {
+    res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true',
-        // fallbacks:"default" (abaixo) exige este beta -- reencaminha a
-        // chamada para outro modelo, do lado do servidor, se os
-        // classificadores de segurança do Claude Opus 5 recusarem o pedido.
-        'anthropic-beta': 'server-side-fallback-2026-07-01'
+        'Authorization': `Bearer ${apiKey}`
       },
       body: JSON.stringify({
         model,
-        max_tokens: 16000,
-        output_config: { effort: 'medium' },
-        system: AI_SYSTEM_PROMPT,
-        messages: [{ role: 'user', content: buildAiUserMessage(batch) }],
-        tools: [{ type: 'web_search_20260209', name: 'web_search', max_uses: 15 }],
-        fallbacks: 'default'
+        messages: [
+          { role: 'system', content: AI_SYSTEM_PROMPT },
+          { role: 'user', content: buildAiUserMessage(batch) }
+        ],
+        plugins: [{ id: 'web' }]
       })
     });
   } catch (e) {
-    throw new Error(`Não foi possível conectar à API do Claude (${e?.message || e}).`);
+    throw new Error(`Não foi possível conectar à API do OpenRouter (${e?.message || e}).`);
   }
-  if (!res.ok) {
-    const body = await res.json().catch(() => null);
-    throw new Error(body?.error?.message || `A API do Claude respondeu com erro (HTTP ${res.status}).`);
+  const body = await res.json().catch(() => null);
+  if (!res.ok || body?.error) {
+    throw new Error(body?.error?.message || `A API do OpenRouter respondeu com erro (HTTP ${res.status}).`);
   }
-  const body = await res.json();
-  if (body.stop_reason === 'refusal') {
-    const category = body.stop_details?.category ? ` (${body.stop_details.category})` : '';
-    throw new Error(`A IA recusou este lote${category}. Tente novamente ou reduza o tamanho do lote.`);
+  const choice = body?.choices?.[0];
+  if (choice?.finish_reason === 'content_filter') {
+    throw new Error('A IA recusou este lote. Tente novamente ou reduza o tamanho do lote.');
   }
-  const text = (body.content || []).filter(b => b.type === 'text').map(b => b.text || '').join('');
+  const text = choice?.message?.content || '';
   return parseAiJsonArray(text);
 }
 
 // Compara o produto atual (p) com a sugestão da IA (s, já no formato
-// devolvido por callClaudeBatch) e retorna só os campos que de fato mudaram.
+// devolvido por callOpenRouterBatch) e retorna só os campos que de fato mudaram.
 // "newValue" é o que de fato será gravado em p[key] se o usuário aceitar --
 // para "price" já é number, para "category" já é o id (não o rótulo).
 function diffAiSuggestion(p, s) {
@@ -200,7 +194,7 @@ function diffAiSuggestion(p, s) {
 async function enrichProjectWithAI(products, onProgress) {
   const { apiKey, model } = await getAiSettings();
   if (!apiKey) {
-    throw new Error('Configure a chave de API do Claude em ⚙ Configurações antes de usar a IA.');
+    throw new Error('Configure a chave de API do OpenRouter em ⚙ Configurações antes de usar a IA.');
   }
   if (!products || products.length === 0) return [];
 
@@ -212,7 +206,7 @@ async function enrichProjectWithAI(products, onProgress) {
     let suggestions = null;
     let batchError = null;
     try {
-      suggestions = await callClaudeBatch(batch, apiKey, model);
+      suggestions = await callOpenRouterBatch(batch, apiKey, model);
     } catch (e) {
       batchError = e.message || String(e);
     }

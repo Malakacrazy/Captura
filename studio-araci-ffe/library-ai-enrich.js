@@ -5,7 +5,7 @@
 // primeiro clique abre, segundo fecha, e o painel é reconstruído do zero a
 // cada abertura (não guarda estado entre uma abertura e outra).
 //
-// A busca em si (chamada à API do Claude + comparação campo a campo) é
+// A busca em si (chamada à API do OpenRouter + comparação campo a campo) é
 // feita por enrichProjectWithAI/diffAiSuggestion, em ai-enrich.js. Este
 // arquivo só monta a revisão visual dos diffs e decide o que gravar quando
 // o usuário aceita.

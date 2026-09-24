@@ -219,20 +219,20 @@
     </div>
 
     <div class="card">
-      <div class="card-title">IA (Claude)</div>
+      <div class="card-title">IA (OpenRouter)</div>
       <div class="card-sub">
         Usada pelo botão <strong>🤖 IA</strong> na Biblioteca de Projetos para pesquisar e sugerir correções
-        nos produtos de um projeto salvo. Gere uma chave em <strong>console.anthropic.com</strong> (seção
-        "API Keys") e cole aqui — nada é enviado à IA sem você clicar em "🤖 IA" naquela tela. A chave fica
-        salva só neste navegador.
+        nos produtos de um projeto salvo. Gere uma chave em <strong>openrouter.ai/keys</strong> e cole aqui —
+        nada é enviado à IA sem você clicar em "🤖 IA" naquela tela. A chave fica salva só neste navegador.
+        O modelo aceita qualquer slug do catálogo do OpenRouter (troque livremente por outro provedor).
       </div>
       <div class="field">
-        <label for="claudeApiKey">Chave de API do Claude</label>
-        <input type="password" id="claudeApiKey" placeholder="sk-ant-..." autocomplete="off" />
+        <label for="openrouterApiKey">Chave de API do OpenRouter</label>
+        <input type="password" id="openrouterApiKey" placeholder="sk-or-v1-..." autocomplete="off" />
       </div>
       <div class="field">
-        <label for="claudeModel">Modelo</label>
-        <input type="text" id="claudeModel" placeholder="claude-opus-5" />
+        <label for="openrouterModel">Modelo</label>
+        <input type="text" id="openrouterModel" placeholder="anthropic/claude-opus-5" />
       </div>
       <button class="btn btn-primary" id="saveAiSettingsBtn">Salvar chave da IA</button>
       <div class="status-bar" id="aiSettingsStatus"></div>
@@ -265,7 +265,7 @@
 
   <!-- platform-sync.js define getPlatformSettings/savePlatformSettings/sendProductsToPlatform -->
   <script src="platform-sync.js"></script>
-  <!-- ai-enrich.js define getAiSettings/saveAiSettings (chave do Claude) -->
+  <!-- ai-enrich.js define getAiSettings/saveAiSettings (chave do OpenRouter) -->
   <script src="ai-enrich.js"></script>
   <script src="options.js"></script>
 </body>
