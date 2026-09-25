@@ -7,7 +7,8 @@
   <title>Studio Araci · Biblioteca de Projetos</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700&display=swap"
+  <link
+    href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:wght@400;600;700;800&family=Italiana&family=Poppins:wght@300;400;500;600;700&display=swap"
     rel="stylesheet" />
   <style>
     *,
@@ -19,6 +20,12 @@
     }
 
     :root {
+      /* Sistema tipográfico oficial: ver print.html para a explicação
+       * completa de por que Italiana fica de fora de telas densas como esta. */
+      --font-title: 'Bodoni Moda', Georgia, serif;
+      --font-accent: 'Italiana', Georgia, serif;
+      --font-body: 'Poppins', system-ui, -apple-system, sans-serif;
+
       --ferrugem: #A35940;
       --terracota: #9F4F39;
       --cacau: #B36C51;
@@ -35,7 +42,7 @@
     body {
       background: var(--bg);
       color: var(--text);
-      font-family: 'Montserrat', sans-serif;
+      font-family: var(--font-body);
       font-size: 13px;
       min-height: 100vh;
     }
@@ -71,8 +78,9 @@
     }
 
     .hdr-title {
+      font-family: var(--font-title);
       color: #fff;
-      font-size: 15px;
+      font-size: 16px;
       font-weight: 600;
     }
 
@@ -566,19 +574,22 @@
     }
 
     .disc-eletros {
-      background: #607080;
+      background: #7F92A8;
     }
 
     .disc-moveis {
-      background: #8D6E63;
+      background: #B36C51;
     }
 
+    /* Areia Dourada é clara demais para texto branco (contraste ~1.9:1) --
+       só esta faixa usa texto escuro, as demais herdam o branco de .disc-bar. */
     .disc-decoracao-enxoval {
-      background: #8E9A6A;
+      background: #CABA94;
+      color: var(--text);
     }
 
     .disc-outros {
-      background: #9AA09A;
+      background: #434B57;
     }
 
     /* ── Arrastar para reordenar ─────────────────────── */
@@ -763,7 +774,7 @@
       width: 420px;
       max-width: 92vw;
       box-shadow: 0 12px 48px rgba(0, 0, 0, 0.22);
-      font-family: 'Montserrat', sans-serif;
+      font-family: var(--font-body);
     }
 
     .modal-title {

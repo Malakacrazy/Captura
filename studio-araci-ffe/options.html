@@ -5,6 +5,11 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Studio Araci · Configurações</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:wght@400;600;700;800&family=Poppins:wght@300;400;500;600;700&display=swap"
+    rel="stylesheet" />
   <style>
     *,
     *::before,
@@ -15,6 +20,11 @@
     }
 
     :root {
+      /* Sistema tipográfico oficial: ver print.html para a explicação
+       * completa. Sem Italiana aqui, mesmo motivo do popup.html. */
+      --font-title: 'Bodoni Moda', Georgia, serif;
+      --font-body: 'Poppins', system-ui, -apple-system, sans-serif;
+
       --ferrugem: #A35940;
       --terracota: #9F4F39;
       --areia: #E8DED4;
@@ -29,7 +39,7 @@
     body {
       background: var(--bg);
       color: var(--text);
-      font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+      font-family: var(--font-body);
       font-size: 13px;
       min-height: 100vh;
     }
@@ -56,8 +66,9 @@
     }
 
     .hdr-title {
+      font-family: var(--font-title);
       color: #fff;
-      font-size: 15px;
+      font-size: 16px;
       font-weight: 600;
     }
 
