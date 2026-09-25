@@ -7,10 +7,19 @@
   <title>Sugestão de Acabamentos · Studio Araci</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700&display=swap"
+  <link
+    href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:wght@400;600;700;800&family=Italiana&family=Poppins:wght@300;400;500;600;700&display=swap"
     rel="stylesheet" />
   <style>
     :root {
+      /* Sistema tipográfico oficial: Bodoni Moda para títulos principais,
+       * Italiana para destaques institucionais curtos (a marca em si, não
+       * corpo de texto -- é um serifado muito fino, ilegível em tamanhos
+       * pequenos), Poppins para todo o resto. */
+      --font-title: 'Bodoni Moda', Georgia, serif;
+      --font-accent: 'Italiana', Georgia, serif;
+      --font-body: 'Poppins', system-ui, -apple-system, sans-serif;
+
       --ferrugem: #A35940;
       --terracota: #9F4F39;
       --cacau: #B36C51;
@@ -26,10 +35,10 @@
       --cat-rev: #9F4F39;
       --cat-lou: #5E6979;
       --cat-ilu: #AA9C79;
-      --cat-ele: #607080;
-      --cat-mov: #8D6E63;
-      --cat-dec: #8E9A6A;
-      --cat-out: #9AA09A;
+      --cat-ele: #7F92A8;
+      --cat-mov: #B36C51;
+      --cat-dec: #CABA94;
+      --cat-out: #434B57;
     }
 
     *,
@@ -42,7 +51,7 @@
 
     body {
       background: #CCC5BC;
-      font-family: 'Montserrat', sans-serif;
+      font-family: var(--font-body);
       color: var(--text);
       min-height: 100vh;
       padding: 32px 0 80px;
@@ -71,7 +80,7 @@
     .pb-btn {
       padding: 7px 18px;
       border-radius: 5px;
-      font-family: 'Montserrat', sans-serif;
+      font-family: var(--font-body);
       font-size: 13px;
       font-weight: 500;
       cursor: pointer;
@@ -153,8 +162,8 @@
     }
 
     .logo-name {
-      font-family: 'Montserrat', sans-serif;
-      font-size: 20px;
+      font-family: var(--font-accent);
+      font-size: 22px;
       font-weight: 400;
       letter-spacing: 0.22em;
       color: var(--ferrugem);
@@ -162,7 +171,7 @@
     }
 
     .logo-tagline {
-      font-family: 'Montserrat', sans-serif;
+      font-family: var(--font-body);
       font-size: 8px;
       letter-spacing: 0.22em;
       text-transform: uppercase;
@@ -183,8 +192,8 @@
     }
 
     .doc-type {
-      font-family: 'Montserrat', sans-serif;
-      font-size: 18px;
+      font-family: var(--font-title);
+      font-size: 19px;
       font-weight: 600;
       color: var(--text);
       text-transform: uppercase;
@@ -214,8 +223,8 @@
     }
 
     .proj-name {
-      font-family: 'Montserrat', sans-serif;
-      font-size: 20px;
+      font-family: var(--font-title);
+      font-size: 21px;
       font-weight: 600;
       color: var(--text);
     }
@@ -253,7 +262,7 @@
     }
 
     .sum-val {
-      font-family: 'Montserrat', sans-serif;
+      font-family: var(--font-body);
       font-size: 22px;
       font-weight: 600;
       color: var(--text);
@@ -328,7 +337,13 @@
       background: var(--cat-mov);
     }
 
-    .cat-label.decoracao-enxoval,
+    /* Areia Dourada é clara demais para texto branco (contraste ~1.9:1) --
+       só esta badge usa texto escuro, as demais herdam o branco padrão. */
+    .cat-label.decoracao-enxoval {
+      background: var(--cat-dec);
+      color: var(--text);
+    }
+
     .cat-line.decoracao-enxoval {
       background: var(--cat-dec);
     }
@@ -344,12 +359,12 @@
     }
 
     /* Table */
-    /* 6 colunas: imagem | Produto | Ambiente | Observações | Qtd | Subtotal.
+    /* 7 colunas: imagem | Produto | Origem | Ambiente | Observações | Qtd | Subtotal.
      * O custo unitário fica só no Excel — no PDF ele apertava demais as colunas.
      * grid-template-columns aqui e em .table-row precisam ser idênticos. */
     .table-header {
       display: grid;
-      grid-template-columns: 52px 1fr 90px 90px 50px 90px;
+      grid-template-columns: 52px 1fr 46px 90px 90px 50px 90px;
       gap: 10px;
       padding: 8px 12px;
       background: var(--grafite);
@@ -365,11 +380,17 @@
 
     .table-row {
       display: grid;
-      grid-template-columns: 52px 1fr 90px 90px 50px 90px;
+      grid-template-columns: 52px 1fr 46px 90px 90px 50px 90px;
       gap: 10px;
       padding: 10px 12px;
       border-bottom: 1px solid var(--areia);
       align-items: center;
+    }
+
+    /* Sem observações em nenhum produto — coluna Obs. encolhe */
+    #sections.no-obs .table-header,
+    #sections.no-obs .table-row {
+      grid-template-columns: 52px 1fr 46px 90px 30px 50px 90px;
     }
 
     .table-row:nth-child(even) {
@@ -414,6 +435,20 @@
     .prod-meta-print a {
       color: var(--ferrugem);
       text-decoration: none;
+    }
+
+    .col-origin {
+      text-align: center;
+      font-size: 15px;
+    }
+
+    .col-origin a {
+      color: var(--ferrugem);
+      text-decoration: none;
+    }
+
+    .col-origin .no-origin {
+      color: var(--duna);
     }
 
     .col-center {
@@ -478,7 +513,7 @@
     }
 
     .gt-value {
-      font-family: 'Montserrat', sans-serif;
+      font-family: var(--font-body);
       font-size: 24px;
       font-weight: 600;
       color: var(--ferrugem);
