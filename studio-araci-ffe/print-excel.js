@@ -397,10 +397,7 @@ function buildXLSX(products, projectName) {
       `<xf numFmtId="0"   fontId="1" fillId="8" borderId="0" xfId="0" applyFont="1" applyFill="1"><alignment vertical="center"/></xf>` +
       `<xf numFmtId="0"   fontId="1" fillId="9" borderId="0" xfId="0" applyFont="1" applyFill="1"><alignment vertical="center"/></xf>` +
       `<xf numFmtId="0"   fontId="1" fillId="10" borderId="0" xfId="0" applyFont="1" applyFill="1"><alignment vertical="center"/></xf>` +
-      // fontId="2" (negrito sem cor = preto automático) em vez de "1" (negrito
-      // branco): fillId 11 agora é Areia Dourada, clara demais para texto
-      // branco (mesmo motivo do .cat-label.decoracao-enxoval no print.html).
-      `<xf numFmtId="0"   fontId="2" fillId="11" borderId="0" xfId="0" applyFont="1" applyFill="1"><alignment vertical="center"/></xf>` +
+      `<xf numFmtId="0"   fontId="1" fillId="11" borderId="0" xfId="0" applyFont="1" applyFill="1"><alignment vertical="center"/></xf>` +
       `<xf numFmtId="0"   fontId="1" fillId="12" borderId="0" xfId="0" applyFont="1" applyFill="1"><alignment vertical="center"/></xf>` +
       `<xf numFmtId="164" fontId="4" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyFont="1" applyBorder="1"/>` +
       `<xf numFmtId="164" fontId="4" fillId="4" borderId="1" xfId="0" applyNumberFormat="1" applyFont="1" applyBorder="1"/>` +
